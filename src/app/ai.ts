@@ -1,9 +1,10 @@
-import { sample, settingsStore } from "../shim/services";
+import { claudeStatus, sample } from "../shim/services";
 import { apiUrl } from "../shim/platform";
 import { PLATFORMS } from "./platforms";
 import type { Brain, Brand } from "./store";
 
-export const hasKey = () => !!settingsStore.apiKey();
+/** True when Claude can be used: built in by HyperMixer, or the person added their own key. */
+export const hasKey = () => claudeStatus.ready();
 
 async function readLink(url: string): Promise<string> {
   const res = await fetch(apiUrl("/api/read-link"), {

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { dailyLimit, spend } from "./_lib/allowance.js";
 
 export const config = { maxDuration: 300 };
 
@@ -9,11 +10,13 @@ const IMG_TYPES: string[] = ["image/jpeg", "image/png", "image/webp", "image/gif
 const SYSTEM =
   "You are the planning and writing engine of a content studio. The user message describes the task and the exact JSON shape to return. Reply with only that JSON: no prose before or after, no code fences.";
 
-function keyFor(req: Request) {
+const builtIn = () => process.env.HDS_SHARED_KEY === "true" && !!process.env.ANTHROPIC_API_KEY;
+
+/** The person's own key if they added one; otherwise HyperMixer's built-in key (ANTHROPIC_API_KEY + HDS_SHARED_KEY=true). */
+function keyFor(req: Request): { key: string; shared: boolean } | null {
   const user = req.headers.get("x-anthropic-key")?.trim();
-  if (user) return user;
-  // Self-hosters can pay for everyone by setting ANTHROPIC_API_KEY and HDS_SHARED_KEY=true.
-  if (process.env.HDS_SHARED_KEY === "true" && process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+  if (user) return { key: user, shared: false };
+  if (builtIn()) return { key: process.env.ANTHROPIC_API_KEY!, shared: true };
   return null;
 }
 
@@ -34,10 +37,16 @@ function parseJson(text: string): unknown {
   throw new SyntaxError("no JSON");
 }
 
+/** Tells the app whether Claude is built in, so it can skip the key step. */
+export async function GET() {
+  return json({ builtIn: builtIn(), dailyLimit: builtIn() ? dailyLimit : 0 });
+}
+
 /** One generic endpoint: the page sends a prompt (plus optional images) and gets JSON back. */
 export async function POST(req: Request) {
-  const apiKey = keyFor(req);
-  if (!apiKey) return json({ error: "Add your Claude API key in Settings.", code: "no_key" }, 401);
+  const auth = keyFor(req);
+  if (!auth) return json({ error: "Claude isn't switched on for HyperMixer yet.", code: "no_key" }, 401);
+  const apiKey = auth.key;
 
   let body: { prompt?: unknown; images?: { media_type: Img; data: string }[] };
   try {
@@ -50,6 +59,10 @@ export async function POST(req: Request) {
   const images = (Array.isArray(body.images) ? body.images : [])
     .slice(0, 5)
     .filter((i) => !!i && IMG_TYPES.includes(i.media_type) && typeof i.data === "string");
+
+  if (auth.shared && (await spend(req)) < 0) {
+    return json({ error: `You've used today's ${dailyLimit} free AI actions. They refill tomorrow.`, code: "daily_limit" }, 429);
+  }
 
   const client = new Anthropic({ apiKey });
   try {
@@ -75,9 +88,9 @@ export async function POST(req: Request) {
     const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     return json({ result: parseJson(text) });
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) return json({ error: "That API key was rejected. Check it in Settings.", code: "bad_key" }, 401);
-    if (err instanceof Anthropic.RateLimitError) return json({ error: "Rate limited by Anthropic. Wait a moment and retry.", code: "rate_limited" }, 429);
-    if (err instanceof Anthropic.APIError) return json({ error: `Claude API error ${err.status ?? ""}: ${err.message}` }, 502);
+    if (err instanceof Anthropic.AuthenticationError) return json(auth.shared ? { error: "Claude is unavailable right now. Try again later.", code: "unavailable" } : { error: "That API key was rejected. Check it in Connect.", code: "bad_key" }, auth.shared ? 503 : 401);
+    if (err instanceof Anthropic.RateLimitError) return json({ error: "Claude is busy. Try again in a minute.", code: "rate_limited" }, 429);
+    if (err instanceof Anthropic.APIError) return json({ error: auth.shared ? "Claude is unavailable right now. Try again later." : `Claude API error ${err.status ?? ""}: ${err.message}` }, 502);
     if (err instanceof SyntaxError) return json({ error: "Claude returned something unreadable. Try again." }, 502);
     return json({ error: "Something went wrong talking to Claude." }, 500);
   }

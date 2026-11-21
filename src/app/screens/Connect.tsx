@@ -3,7 +3,7 @@ import { folder } from "../../shim/folder";
 import { db, docsOf } from "../../shim/db";
 import { saveFile } from "../../shim/native";
 import { isMobile } from "../../shim/platform";
-import { conn, settingsStore } from "../../shim/services";
+import { claudeStatus, conn, settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
 import { errText, Icon, Sheet, toast } from "../ui";
 import { PLATFORMS } from "../platforms";
@@ -27,7 +27,9 @@ export default function Connect({ brands }: ScreenProps) {
   const [sheet, setSheet] = useState<"" | "claude" | "license" | "heygen">("");
   const [, refresh] = useState(0);
   const f = useFolder();
-  const claude = !!settingsStore.apiKey();
+  const ownKey = !!settingsStore.apiKey();
+  const builtIn = claudeStatus.builtIn();
+  const claude = ownKey || builtIn;
   const license = settingsStore.license();
   const media = f.items.length;
   const heygen = !!settingsStore.heygen();
@@ -62,7 +64,7 @@ export default function Connect({ brands }: ScreenProps) {
   };
 
   const rows = [
-    { key: "claude", g: "Cl", c: "#B4532A", label: "Claude", sub: claude ? "Writes brand brains and drafts" : "Your API key powers brains and drafts", on: claude, act: () => setSheet("claude") },
+    { key: "claude", g: "Cl", c: "#B4532A", label: "Claude", sub: builtIn && !ownKey ? `Built in. ${claudeStatus.dailyLimit() || 20} free AI actions a day` : ownKey ? "Using your own Claude key" : "Your API key powers brains and drafts", on: claude, act: () => setSheet("claude") },
     { key: "media", g: "Me", c: "#5C6176", label: isMobile ? "Photos and clips" : "Media folder", sub: media ? `${f.name || "Picked"} · ${media} files, read on this device` : "Clips, photos and music for edits. Never uploaded.", on: media > 0, act: pickFolder },
     { key: "license", g: "Rv", c: "#3846F0", label: "Video rendering", sub: license ? "Remotion renders edits on this device" : "Turn on to render videos on this device", on: !!license, act: () => setSheet("license") },
   ];
@@ -150,8 +152,8 @@ export default function Connect({ brands }: ScreenProps) {
       </button>
 
       {sheet === "claude" && (
-        <KeySheet title="Claude" label="Claude API key" placeholder="sk-ant-…" initial={settingsStore.apiKey()}
-          hint={<>Get one at <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>. It stays on this device and is sent only with each request, never stored on our server.</>}
+        <KeySheet title="Claude" label={builtIn ? "Your own Claude key (optional)" : "Claude API key"} placeholder="sk-ant-…" initial={settingsStore.apiKey()}
+          hint={<>{builtIn ? "Claude is already built in, so you don't need this. Add a key only to go past the daily free limit, billed to your own Anthropic account. " : ""}Get one at <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>. It stays on this device and is sent only with each request, never stored on our server.</>}
           onSave={(v) => { store(KEYS.claude, v); refresh((n) => n + 1); setSheet(""); toast(v ? "Claude connected" : "Claude disconnected"); }}
           onClose={() => setSheet("")} />
       )}

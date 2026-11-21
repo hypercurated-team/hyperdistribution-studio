@@ -10,11 +10,14 @@ import { registerWorker } from "../shim/assets";
 import { folder } from "../shim/folder";
 import { setupNative } from "../shim/native";
 import { startRenderer } from "../shim/render";
+import { claudeStatus } from "../shim/services";
 import App from "./App";
 import "./app.css";
 
 (async () => {
   setupNative();
+  // Learn whether Claude is built in before the first screen, but never wait long for it.
+  await Promise.race([claudeStatus.refresh(), new Promise((r) => setTimeout(r, 1500))]);
   await registerWorker();
   createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
   startRenderer();

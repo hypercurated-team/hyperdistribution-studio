@@ -26,11 +26,17 @@ export default function App() {
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
+  const [, claudeTick] = useState(0);
+  useEffect(() => {
+    const on = () => claudeTick((n) => n + 1);
+    addEventListener("hm:claude", on);
+    return () => removeEventListener("hm:claude", on);
+  }, []);
   const brands = useCollection<Brand>("brands");
   const posts = useCollection<Post>("posts");
   const live = brands.filter((b) => b.status !== "paused");
 
-  // First visit: start at Connect until there's a key; then Dashboard.
+  // First visit: start at Connect until Claude is ready (built in, or the person's own key); then Dashboard.
   const route: Route = loc.route || (hasKey() && live.length ? "dashboard" : hasKey() ? "brands" : "connect");
   const counts = {
     swipe: posts.filter((p) => p.status === "idea").length,
