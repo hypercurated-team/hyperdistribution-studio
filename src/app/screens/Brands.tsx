@@ -68,6 +68,7 @@ function BrandSheet({ brand, count, onClose }: { brand: Brand | null; count: num
   const [color, setColor] = useState(brand?.color ?? BRAND_COLORS[count % BRAND_COLORS.length]);
   const [chans, setChans] = useState<Channel[]>(brand?.channels ?? []);
   const [busy, setBusy] = useState("");
+  const [shots, setShots] = useState<File[]>([]);
   const [confirmDel, setConfirmDel] = useState(false);
 
   const toggle = (platform: string) =>
@@ -82,9 +83,10 @@ function BrandSheet({ brand, count, onClose }: { brand: Brand | null; count: num
       if (withBrain) {
         if (!hasKey()) { toast("Connect Claude first"); return go("connect"); }
         setBusy("Reading links and building the brain…");
-        const { brain, read } = await buildBrain(data);
+        const { brain, read, seen } = await buildBrain(data, shots);
         data.brain = brain;
-        toast(read ? `Brain built from ${read} link${read > 1 ? "s" : ""}` : "Brain built from the name only. Add links for a better one.");
+        const from = [read ? `${read} link${read > 1 ? "s" : ""}` : "", seen ? `${seen} screenshot${seen > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ");
+        toast(from ? `Brain built from ${from}` : "Brain built from the name only. Add links or screenshots for a better one.");
       }
       await saveBrand(brand?.id ?? null, data);
       if (!withBrain) toast("Saved");
@@ -101,6 +103,14 @@ function BrandSheet({ brand, count, onClose }: { brand: Brand | null; count: num
       <div className="field">
         <label htmlFor="b-links">Links for the brain</label>
         <textarea id="b-links" value={links} onChange={(e) => setLinks(e.target.value)} placeholder={"Website, Instagram, LinkedIn…\none per line"} style={{ minHeight: 80 }} />
+        <div className="row wrap">
+          <label className="btn pill">
+            {shots.length ? `${shots.length} screenshot${shots.length > 1 ? "s" : ""}` : "Add screenshots"}
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => setShots([...(e.target.files ?? [])].slice(0, 4))} />
+          </label>
+          {shots.length > 0 && <button type="button" className="btn pill" onClick={() => setShots([])}>Clear</button>}
+        </div>
+        <span className="hint">Optional: up to 4 screenshots of its Instagram or website. Claude reads the look and voice from them. They aren't saved.</span>
       </div>
       <div className="field">
         <span className="small" style={{ fontWeight: 600, color: "var(--muted)" }}>Colour</span>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { folder } from "../../shim/folder";
 import { settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
+import { hasKey, pickClips } from "../ai";
 import { isVideo, pf } from "../platforms";
 import { col, savePost, useCollection, ymd, type Brand, type Media, type Post, type Render } from "../store";
 import { brandColor, errText, Glyph, Icon, Mono, toast } from "../ui";
@@ -72,6 +73,17 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
   }, [title, notes, clips, length, style, date, time]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (id: string) => setClips((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 8 ? c : [...c, id]));
+  const [picking, setPicking] = useState(false);
+  const autoPick = async () => {
+    if (!hasKey()) return toast("Claude isn't switched on yet");
+    setPicking(true);
+    try {
+      const order = await pickClips({ title, notes, format: post.format }, media, length);
+      if (order.length) { setClips(order); toast(`Claude picked ${order.length} clip${order.length > 1 ? "s" : ""}`); }
+      else toast("Claude didn't find clips that fit. Pick them yourself.");
+    } catch (e) { toast(errText(e)); }
+    setPicking(false);
+  };
   const connect = async () => { try { await folder.connect(); } catch (e) { if ((e as Error).name !== "AbortError") toast("Couldn't open that folder"); } };
 
   const render = async () => {
@@ -121,8 +133,11 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
       {video && (
         <section className="card stack" style={{ padding: 14, gap: 12 }} aria-label="Video edit">
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <strong>Clips {clips.length ? `· ${clips.length} picked` : ""}</strong>
-            <button type="button" className="btn pill" onClick={connect}>{media.length ? "Change media" : "Add media"}</button>
+            <strong style={{ whiteSpace: "nowrap" }}>Clips{clips.length ? ` · ${clips.length}` : ""}</strong>
+            <div className="row" style={{ gap: 8 }}>
+              {media.length > 1 && <button type="button" className="btn pill" disabled={picking} onClick={autoPick}><Icon name="spark" size={16} />{picking ? "Picking…" : "Auto-pick"}</button>}
+              <button type="button" className="btn pill" onClick={connect}>{media.length ? "Change" : "Add media"}</button>
+            </div>
           </div>
           {media.length ? (
             <div className="clips">
