@@ -62,7 +62,8 @@ export const sample = {
   async limits() {
     return { images: { maxCount: 4, maxInputBytes: 900_000 } };
   },
-  async json(prompt: string, opts: { images?: Blob[] } = {}) {
+  /** quick: drafts and captions (low effort, shorter answer); leave it off for brand brains. */
+  async json(prompt: string, opts: { images?: Blob[]; quick?: boolean } = {}) {
     const key = settingsStore.apiKey();
     if (!key && !builtIn) {
       openSettings("Add your Claude API key to use the ✦ features.");
@@ -74,12 +75,12 @@ export const sample = {
       res = await fetch(apiUrl("/api/ai"), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}) },
-        body: JSON.stringify({ prompt, images }),
+        body: JSON.stringify({ prompt, images, ...(opts.quick ? { effort: "low", maxTokens: 4000 } : {}) }),
       });
       data = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
     } catch {
       // The connection dropped (iOS calls this "Load failed"), usually because the app went to the background.
-      throw err("network", "The connection dropped while Claude was writing. Keep HyperMixer open and try again.");
+      throw err("network", "Claude took too long or the connection dropped. Tap to try again.");
     }
     // Errors that happen while Claude writes arrive in a 200 response body.
     if (!res.ok || data.error) throw err(data.code || (res.status === 429 ? "rate_limited" : "error"), data.error || "Claude couldn't answer. Try again.");

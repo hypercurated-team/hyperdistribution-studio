@@ -40,7 +40,7 @@ export async function draftPosts(brand: Brand, count = 5): Promise<Draft[]> {
 Brand brain: ${JSON.stringify(brand.brain ?? { summary: brand.industry ?? "" })}
 Channels: ${JSON.stringify(chans)}
 Write ${count} new post drafts, spread across the channels, each native to its platform and true to the brand's voice and pillars. No invented facts, prices or statistics; use [placeholders] where a fact is needed.
-Reply with only JSON: {"drafts":[{"channelId":"one of the channel ids","format":"one of that channel's formats","hook":"the first line or on-screen hook, under 12 words","caption":"the full caption or script, ready to post","why":"which pillar, 2-4 words"}]}`)) as { drafts?: Draft[] };
+Reply with only JSON: {"drafts":[{"channelId":"one of the channel ids","format":"one of that channel's formats","hook":"the first line or on-screen hook, under 12 words","caption":"the full caption or script, ready to post","why":"which pillar, 2-4 words"}]}`, { quick: true })) as { drafts?: Draft[] };
   const ids = new Set(chans.map((c) => c.id));
   return (out.drafts ?? []).filter((d) => d && ids.has(d.channelId) && d.hook);
 }

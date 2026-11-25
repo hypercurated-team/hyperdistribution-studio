@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   if (!auth) return json({ error: "Claude isn't switched on for HyperMixer yet.", code: "no_key" }, 401);
   const apiKey = auth.key;
 
-  let body: { prompt?: unknown; images?: { media_type: Img; data: string }[] };
+  let body: { prompt?: unknown; images?: { media_type: Img; data: string }[]; effort?: unknown; maxTokens?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -64,15 +64,19 @@ export async function POST(req: Request) {
     return json({ error: `You've used today's ${dailyLimit} free AI actions. They refill tomorrow.`, code: "daily_limit" }, 429);
   }
 
+  // Quick jobs (drafts, captions) ask for low effort and a smaller answer; brand brains stay on medium.
+  const effort = body.effort === "low" ? "low" : "medium";
+  const maxTokens = Math.max(1000, Math.min(16000, Math.round(Number(body.maxTokens) || 16000)));
+
   const ask = async (): Promise<Record<string, unknown>> => {
     const client = new Anthropic({ apiKey });
     try {
       const response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: 16000,
+        max_tokens: maxTokens,
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
-        output_config: { effort: "medium" },
+        output_config: { effort },
         system: SYSTEM,
         messages: [
           {
@@ -101,15 +105,18 @@ export async function POST(req: Request) {
   // Claude can take longer than that, so send a space every few seconds while it writes;
   // JSON ignores leading whitespace, and errors arrive in the body as {error, code}.
   const enc = new TextEncoder();
+  let gone = false;
   const stream = new ReadableStream<Uint8Array>({
+    cancel() { gone = true; },
     async start(controller) {
       const ping = setInterval(() => { try { controller.enqueue(enc.encode(" ")); } catch { /* closed */ } }, 5000);
       controller.enqueue(enc.encode(" "));
       const out = await ask();
       clearInterval(ping);
-      if ("error" in out && auth.shared) await refund(req);
-      controller.enqueue(enc.encode(JSON.stringify(out)));
-      controller.close();
+      // Only a delivered answer counts against the daily allowance.
+      if (auth.shared && ("error" in out || gone)) await refund(req);
+      if (gone) return;
+      try { controller.enqueue(enc.encode(JSON.stringify(out))); controller.close(); } catch { if (auth.shared && !("error" in out)) await refund(req); }
     },
   });
   return new Response(stream, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store", "x-accel-buffering": "no" } });
