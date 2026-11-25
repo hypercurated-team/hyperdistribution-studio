@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { dailyLimit, spend } from "./_lib/allowance.js";
+import { dailyLimit, refund, spend } from "./_lib/allowance.js";
 
 export const config = { maxDuration: 300 };
 
@@ -64,34 +64,53 @@ export async function POST(req: Request) {
     return json({ error: `You've used today's ${dailyLimit} free AI actions. They refill tomorrow.`, code: "daily_limit" }, 429);
   }
 
-  const client = new Anthropic({ apiKey });
-  try {
-    const response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "medium" },
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...images.map((i) => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.media_type, data: i.data } })),
-            { type: "text" as const, text: prompt },
-          ],
-        },
-      ],
-    });
-    if (response.stop_reason === "refusal") return json({ error: "Claude declined this request. Try rewording it.", code: "refused" }, 422);
-    if (response.stop_reason === "max_tokens") return json({ error: "The answer was too long. Try a smaller request." }, 422);
-    const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-    return json({ result: parseJson(text) });
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) return json(auth.shared ? { error: "Claude is unavailable right now. Try again later.", code: "unavailable" } : { error: "That API key was rejected. Check it in Connect.", code: "bad_key" }, auth.shared ? 503 : 401);
-    if (err instanceof Anthropic.RateLimitError) return json({ error: "Claude is busy. Try again in a minute.", code: "rate_limited" }, 429);
-    if (err instanceof Anthropic.APIError) return json({ error: auth.shared ? "Claude is unavailable right now. Try again later." : `Claude API error ${err.status ?? ""}: ${err.message}` }, 502);
-    if (err instanceof SyntaxError) return json({ error: "Claude returned something unreadable. Try again." }, 502);
-    return json({ error: "Something went wrong talking to Claude." }, 500);
-  }
+  const ask = async (): Promise<Record<string, unknown>> => {
+    const client = new Anthropic({ apiKey });
+    try {
+      const response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "medium" },
+        system: SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...images.map((i) => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.media_type, data: i.data } })),
+              { type: "text" as const, text: prompt },
+            ],
+          },
+        ],
+      });
+      if (response.stop_reason === "refusal") return { error: "Claude declined this request. Try rewording it.", code: "refused" };
+      if (response.stop_reason === "max_tokens") return { error: "The answer was too long. Try a smaller request.", code: "too_long" };
+      const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+      return { result: parseJson(text) };
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) return auth.shared ? { error: "Claude is unavailable right now. Try again later.", code: "unavailable" } : { error: "That API key was rejected. Check it in Connect.", code: "bad_key" };
+      if (err instanceof Anthropic.RateLimitError) return { error: "Claude is busy. Try again in a minute.", code: "rate_limited" };
+      if (err instanceof Anthropic.APIError) return { error: auth.shared ? "Claude is unavailable right now. Try again later." : `Claude API error ${err.status ?? ""}: ${err.message}`, code: "unavailable" };
+      if (err instanceof SyntaxError) return { error: "Claude returned something unreadable. Try again.", code: "unreadable" };
+      return { error: "Something went wrong talking to Claude.", code: "error" };
+    }
+  };
+
+  // Phones drop a request that stays silent for about a minute ("Load failed" on iOS).
+  // Claude can take longer than that, so send a space every few seconds while it writes;
+  // JSON ignores leading whitespace, and errors arrive in the body as {error, code}.
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const ping = setInterval(() => { try { controller.enqueue(enc.encode(" ")); } catch { /* closed */ } }, 5000);
+      controller.enqueue(enc.encode(" "));
+      const out = await ask();
+      clearInterval(ping);
+      if ("error" in out && auth.shared) await refund(req);
+      controller.enqueue(enc.encode(JSON.stringify(out)));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store", "x-accel-buffering": "no" } });
 }

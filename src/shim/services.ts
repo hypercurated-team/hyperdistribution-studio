@@ -69,13 +69,20 @@ export const sample = {
       throw err("no_key", "Claude isn't switched on yet.");
     }
     const images = (await Promise.all((opts.images ?? []).slice(0, 4).map(toBase64))).filter(Boolean);
-    const res = await fetch(apiUrl("/api/ai"), {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}) },
-      body: JSON.stringify({ prompt, images }),
-    });
-    const data = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
-    if (!res.ok) throw err(data.code || (res.status === 429 ? "rate_limited" : "error"), data.error || "Claude couldn't answer. Try again.");
+    let res: Response, data: { result?: unknown; error?: string; code?: string };
+    try {
+      res = await fetch(apiUrl("/api/ai"), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}) },
+        body: JSON.stringify({ prompt, images }),
+      });
+      data = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
+    } catch {
+      // The connection dropped (iOS calls this "Load failed"), usually because the app went to the background.
+      throw err("network", "The connection dropped while Claude was writing. Keep HyperMixer open and try again.");
+    }
+    // Errors that happen while Claude writes arrive in a 200 response body.
+    if (!res.ok || data.error) throw err(data.code || (res.status === 429 ? "rate_limited" : "error"), data.error || "Claude couldn't answer. Try again.");
     return data.result;
   },
 };
