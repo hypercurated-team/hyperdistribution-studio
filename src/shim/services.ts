@@ -8,6 +8,32 @@ const HEYGEN = "hm:heygen-key";
 const get = (k: string) => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } };
 const put = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* private mode */ } };
 
+/** A random id for this device, used only to count the daily free allowance. */
+const deviceId = () => {
+  let id = get("hm:device");
+  if (!id) { id = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)) ; put("hm:device", id); }
+  return id;
+};
+
+/** Whether this HyperMixer server has Claude built in (no key needed). Cached so the app knows at once on next open. */
+let builtIn = get("hm:builtin") === "1";
+let dailyLimit = Number(get("hm:daily-limit")) || 0;
+export const claudeStatus = {
+  builtIn: () => builtIn,
+  dailyLimit: () => dailyLimit,
+  ready: () => builtIn || !!get(KEY),
+  async refresh() {
+    try {
+      const res = await fetch(apiUrl("/api/ai"), { cache: "no-store" });
+      if (!res.ok) return;
+      const d = await res.json();
+      builtIn = !!d.builtIn; dailyLimit = Number(d.dailyLimit) || 0;
+      put("hm:builtin", builtIn ? "1" : ""); put("hm:daily-limit", dailyLimit ? String(dailyLimit) : "");
+      dispatchEvent(new Event("hm:claude"));
+    } catch { /* offline: keep the cached answer */ }
+  },
+};
+
 export const settingsStore = {
   apiKey: () => get(KEY),
   license: () => get(LICENSE),
@@ -38,14 +64,14 @@ export const sample = {
   },
   async json(prompt: string, opts: { images?: Blob[] } = {}) {
     const key = settingsStore.apiKey();
-    if (!key) {
+    if (!key && !builtIn) {
       openSettings("Add your Claude API key to use the ✦ features.");
-      throw err("no_key", "Add your Claude API key in Settings.");
+      throw err("no_key", "Claude isn't switched on yet.");
     }
     const images = (await Promise.all((opts.images ?? []).slice(0, 4).map(toBase64))).filter(Boolean);
     const res = await fetch(apiUrl("/api/ai"), {
       method: "POST",
-      headers: { "content-type": "application/json", "x-anthropic-key": key },
+      headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}) },
       body: JSON.stringify({ prompt, images }),
     });
     const data = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
