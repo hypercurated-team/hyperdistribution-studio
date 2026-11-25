@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Linking, Platform, Pressable, StyleSheet, Text, useColorScheme } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
+import * as Media from "./media";
 
 // react-native-webview's iOS + Android + Windows prop types collapse to never under the
 // current React types, so the component is re-typed loosely here. The ref keeps its real type.
@@ -17,7 +18,8 @@ const WebView = RNWebView as unknown as React.ComponentType<Record<string, unkno
  * HyperMixer for iOS and Android: the HyperMixer web app in a native shell.
  * The shell adds what a browser tab can't do well on a phone: saving and
  * sharing finished videos and backups, the Android back button, an offline
- * screen, and opening other sites in the system browser.
+ * screen, opening other sites in the system browser, and the phone's own
+ * photos and files (see media.ts).
  */
 const WEB_URL: string = Constants.expoConfig?.extra?.webUrl ?? "https://hyperdistribution-studio.vercel.app";
 const ORIGIN = new URL(WEB_URL).origin;
@@ -28,7 +30,12 @@ type Msg =
   | { type: "save-start"; id: string; name: string; mime: string }
   | { type: "save-chunk"; id: string; data: string }
   | { type: "save-end"; id: string }
-  | { type: "panel"; open: boolean };
+  | { type: "panel"; open: boolean }
+  | { type: "media-scan" }
+  | { type: "media-change" }
+  | { type: "files-pick" }
+  | { type: "media-thumbs"; ids: string[] }
+  | { type: "media-file"; id: string; req: string };
 
 // Tells the page it is inside the app, and reports whether a side panel is open (for the back button).
 const BOOT = `(() => {
@@ -64,10 +71,20 @@ function Shell() {
     return () => sub.remove();
   }, []);
 
+  // Replies to the page arrive through window.__hmFromApp(message).
+  const send = useCallback<Media.Send>((m) => {
+    web.current?.injectJavaScript(`window.__hmFromApp && window.__hmFromApp(${JSON.stringify(m)}); true;`);
+  }, []);
+
   const onMessage = useCallback(async (e: WebViewMessageEvent) => {
     let m: Msg;
     try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
     if (m.type === "panel") { panelOpen.current = m.open; return; }
+    if (m.type === "media-scan") { Media.scan(send).catch(() => send({ type: "media-perm", access: "error" })); return; }
+    if (m.type === "media-change") { Media.changeSelection().then(() => Media.scan(send)).catch(() => {}); return; }
+    if (m.type === "files-pick") { Media.pickFiles(send).catch(() => {}); return; }
+    if (m.type === "media-thumbs") { Media.thumbs(m.ids, send); return; }
+    if (m.type === "media-file") { Media.sendFile(m.id, m.req, send); return; }
     try {
       if (m.type === "save-start") {
         const name = m.name.replace(/[^\w.-]+/g, "_") || "hypermixer-file";
@@ -85,7 +102,7 @@ function Shell() {
     } catch {
       web.current?.injectJavaScript(`window.toast && window.toast("Couldn't save that file"); true;`);
     }
-  }, []);
+  }, [send]);
 
   if (failed) {
     return (

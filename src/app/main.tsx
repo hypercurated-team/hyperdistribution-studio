@@ -11,6 +11,7 @@ import { folder } from "../shim/folder";
 import { setupNative } from "../shim/native";
 import { startRenderer } from "../shim/render";
 import { claudeStatus } from "../shim/services";
+import { phone } from "../shim/phone";
 import App from "./App";
 import "./app.css";
 
@@ -22,4 +23,7 @@ import "./app.css";
   createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
   startRenderer();
   folder.restore().catch(() => {});
+  phone.setup();
+  // In the app, rescan the photos the person already allowed (no prompt the second time).
+  try { if (phone.available && localStorage.getItem("hm:phone-scan")) phone.scan(); } catch { /* private mode */ }
 })();

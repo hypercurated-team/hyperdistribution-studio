@@ -1,0 +1,110 @@
+import { addMediaSource, mediaChanged, type FolderItem } from "./folder";
+import { isNative, postToApp } from "./platform";
+
+/**
+ * Inside the iOS / Android app: the phone's photo library (whatever the person
+ * allows) and files picked from Files or cloud drives, read by the app shell
+ * (mobile/media.ts). Items join the same media list as a picked folder.
+ * Previews arrive on request; a full file is fetched only when an edit needs it.
+ */
+type Wire = { id: string; name: string; kind: "image" | "video"; w?: number; h?: number; d?: number; t?: number; src: "phone" | "files" };
+export type Access = "unknown" | "all" | "limited" | "none" | "error";
+
+const state = { access: "unknown" as Access, scanning: false, items: [] as FolderItem[], files: [] as FolderItem[] };
+const byId = new Map<string, FolderItem>();
+const waiting = new Map<string, { parts: string[]; mime: string; ok: (b: Blob) => void; no: (e: Error) => void }>();
+const asked = new Set<string>();
+
+const changed = () => mediaChanged();
+
+const toItem = (w: Wire): FolderItem => {
+  const it: FolderItem = {
+    id: w.id, name: w.name, path: w.name, kind: w.kind, size: 0, assetUrl: "",
+    durationSec: w.d ?? undefined, width: w.w, height: w.h,
+    takenAt: w.t ?? 0, addedAt: w.t ?? 0, tags: [w.src === "files" ? "files" : "photos"], description: "", source: w.src,
+  };
+  byId.set(it.id, it);
+  return it;
+};
+
+function onApp(m: Record<string, unknown>) {
+  switch (m.type) {
+    case "media-perm":
+      state.access = m.access as Access;
+      if (state.access === "none" || state.access === "error") state.scanning = false;
+      else { state.items = []; }
+      return changed();
+    case "media-items":
+      state.items = state.items.concat((m.items as Wire[]).map(toItem));
+      if (m.done) state.scanning = false;
+      changed();
+      // Previews for the newest items, so the grid and Auto-pick have something to show.
+      if (state.items.length <= 400) phone.previews(state.items.slice(0, 96).map((i) => i.id));
+      return;
+    case "files-items": {
+      const add = (m.items as Wire[]).map(toItem);
+      state.files = add.concat(state.files);
+      changed();
+      return phone.previews(add.map((i) => i.id));
+    }
+    case "media-thumb": {
+      const it = byId.get(m.id as string);
+      if (it && m.data) { it.thumbUrl = "data:image/jpeg;base64," + m.data; changedSoon(); }
+      return;
+    }
+    case "file-start": { const w = waiting.get(m.req as string); if (w) w.mime = String(m.mime || ""); return; }
+    case "file-chunk": waiting.get(m.req as string)?.parts.push(m.data as string); return;
+    case "file-end": {
+      const w = waiting.get(m.req as string); if (!w) return;
+      waiting.delete(m.req as string);
+      const bytes = w.parts.map((p) => Uint8Array.from(atob(p), (c) => c.charCodeAt(0)));
+      return w.ok(new Blob(bytes, { type: w.mime || "application/octet-stream" }));
+    }
+    case "file-error": {
+      const w = waiting.get(m.req as string); waiting.delete(m.req as string);
+      return w?.no(new Error(String(m.error || "Couldn't read that file")));
+    }
+  }
+}
+
+let soon: ReturnType<typeof setTimeout> | undefined;
+const changedSoon = () => { clearTimeout(soon); soon = setTimeout(changed, 250); };
+
+export const phone = {
+  state,
+  available: isNative,
+  setup() {
+    if (!isNative) return;
+    (window as unknown as { __hmFromApp: typeof onApp }).__hmFromApp = onApp;
+    addMediaSource(() => state.files.concat(state.items));
+  },
+  scan() {
+    state.scanning = true; changed(); postToApp({ type: "media-scan" });
+    try { localStorage.setItem("hm:phone-scan", "1"); } catch { /* private mode */ }
+  },
+  changeSelection() { postToApp({ type: "media-change" }); },
+  pickFiles() { postToApp({ type: "files-pick" }); },
+  /** Asks the app for previews it hasn't sent yet. */
+  previews(ids: string[]) {
+    const want = ids.filter((id) => byId.has(id) && !byId.get(id)!.thumbUrl && !asked.has(id));
+    want.forEach((id) => asked.add(id));
+    if (want.length) postToApp({ type: "media-thumbs", ids: want });
+  },
+  isPhoneItem: (id: string) => byId.has(id),
+  /** Makes sure these items have their full file, fetching from the phone as needed. */
+  async ensureFiles(ids: string[]) {
+    for (const id of ids) {
+      const it = byId.get(id);
+      if (!it || it.assetUrl) continue;
+      const req = Math.random().toString(36).slice(2);
+      const blob = await new Promise<Blob>((ok, no) => {
+        waiting.set(req, { parts: [], mime: "", ok, no });
+        postToApp({ type: "media-file", id, req });
+        setTimeout(() => { if (waiting.delete(req)) no(new Error("The phone took too long to hand over that file")); }, 180_000);
+      });
+      it.assetUrl = URL.createObjectURL(blob);
+      it.size = blob.size;
+    }
+    changed();
+  },
+};
