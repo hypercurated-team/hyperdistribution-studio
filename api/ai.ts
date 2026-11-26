@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { dailyLimit, refund, spend } from "./_lib/allowance.js";
+import { firebaseConfig, personFrom } from "./_lib/firebase.js";
 
 export const config = { maxDuration: 300 };
 
@@ -60,7 +61,15 @@ export async function POST(req: Request) {
     .slice(0, 5)
     .filter((i) => !!i && IMG_TYPES.includes(i.media_type) && typeof i.data === "string");
 
-  if (auth.shared && (await spend(req)) < 0) {
+  // HyperMixer's own key: the daily allowance belongs to the signed-in person (or, signed out, this device).
+  let uid: string | undefined;
+  if (auth.shared) {
+    const who = await personFrom(req);
+    if (who === "bad") return json({ error: "Your sign-in expired. Sign in again.", code: "reauth" }, 401);
+    if (!who && process.env.HM_REQUIRE_SIGNIN === "true" && firebaseConfig()) return json({ error: "Sign in to use HyperMixer's free AI actions.", code: "signin" }, 401);
+    uid = who?.uid;
+  }
+  if (auth.shared && (await spend(req, uid)) < 0) {
     return json({ error: `You've used today's ${dailyLimit} free AI actions. They refill tomorrow.`, code: "daily_limit" }, 429);
   }
 
@@ -114,9 +123,9 @@ export async function POST(req: Request) {
       const out = await ask();
       clearInterval(ping);
       // Only a delivered answer counts against the daily allowance.
-      if (auth.shared && ("error" in out || gone)) await refund(req);
+      if (auth.shared && ("error" in out || gone)) await refund(req, uid);
       if (gone) return;
-      try { controller.enqueue(enc.encode(JSON.stringify(out))); controller.close(); } catch { if (auth.shared && !("error" in out)) await refund(req); }
+      try { controller.enqueue(enc.encode(JSON.stringify(out))); controller.close(); } catch { if (auth.shared && !("error" in out)) await refund(req, uid); }
     },
   });
   return new Response(stream, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store", "x-accel-buffering": "no" } });

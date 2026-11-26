@@ -1,4 +1,5 @@
 /** Claude, link reading and settings for the ported board. */
+import { auth } from "./auth";
 import { apiUrl } from "./platform";
 import { connectDrive, disconnectDrive, driveAvailable, driveConnected, driveTool } from "./drive";
 
@@ -71,10 +72,11 @@ export const sample = {
     }
     const images = (await Promise.all((opts.images ?? []).slice(0, 4).map(toBase64))).filter(Boolean);
     let res: Response, data: { result?: unknown; error?: string; code?: string };
+    const idToken = key ? null : await auth.idToken().catch(() => null);
     try {
       res = await fetch(apiUrl("/api/ai"), {
         method: "POST",
-        headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}) },
+        headers: { "content-type": "application/json", "x-hm-device": deviceId(), ...(key ? { "x-anthropic-key": key } : {}), ...(idToken ? { authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({ prompt, images, ...(opts.quick ? { effort: "low", maxTokens: 4000 } : {}) }),
       });
       data = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
@@ -82,6 +84,9 @@ export const sample = {
       // The connection dropped (iOS calls this "Load failed"), usually because the app went to the background.
       throw err("network", "Claude took too long or the connection dropped. Tap to try again.");
     }
+    // The free allowance needs an account (or the sign-in expired): show sign-in.
+    if (data.code === "reauth") auth.signOut();
+    if (data.code === "signin" || data.code === "reauth") window.dispatchEvent(new Event("hm:need-signin"));
     // Errors that happen while Claude writes arrive in a 200 response body.
     if (!res.ok || data.error) throw err(data.code || (res.status === 429 ? "rate_limited" : "error"), data.error || "Claude couldn't answer. Try again.");
     return data.result;
