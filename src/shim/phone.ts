@@ -15,6 +15,8 @@ const state = {
   access: "unknown" as Access, scanning: false, items: [] as FolderItem[], files: [] as FolderItem[],
   /** On-phone understanding of the library: progress of the indexer. */
   vision: { available: true, running: false, paused: false, done: 0, total: 0 },
+  /** Which app build and over-the-air update is running (shown on Connect). */
+  shell: { version: "", update: "", channel: "", updatedAt: "" },
 };
 const visionWait = new Map<string, (r: { results: Omit<Insight, "groups">[]; unavailable?: boolean }) => void>();
 const byId = new Map<string, FolderItem>();
@@ -43,7 +45,13 @@ const toItem = (w: Wire): FolderItem => {
 };
 
 function onApp(m: Record<string, unknown>) {
+  // Other features (cloud sign-in results) listen for the shell's messages too.
+  window.dispatchEvent(new CustomEvent("hm:app", { detail: m }));
   switch (m.type) {
+    case "shell-info":
+      state.shell = { version: String(m.version || ""), update: String(m.update || ""), channel: String(m.channel || ""), updatedAt: String(m.updatedAt || "") };
+      mediaChanged();
+      return;
     case "media-perm":
       state.access = m.access as Access;
       if (state.access === "none" || state.access === "error") state.scanning = false;

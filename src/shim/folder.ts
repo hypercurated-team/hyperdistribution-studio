@@ -11,7 +11,7 @@ type Kind = "video" | "image" | "audio";
 export type FolderItem = {
   id: string; name: string; path: string; kind: Kind; size: number;
   assetUrl: string; thumbUrl?: string; durationSec?: number; width?: number; height?: number;
-  takenAt: number; addedAt: number; tags: string[]; description: string; source: "folder" | "phone" | "files";
+  takenAt: number; addedAt: number; tags: string[]; description: string; source: "folder" | "phone" | "files" | "google" | "microsoft" | "dropbox";
 };
 type DirHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterable<FileSystemHandle>;

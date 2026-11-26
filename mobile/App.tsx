@@ -2,9 +2,10 @@ import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as SplashScreen from "expo-splash-screen";
+import * as Updates from "expo-updates";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Linking, Platform, Pressable, StyleSheet, Text, useColorScheme } from "react-native";
+import { AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, useColorScheme } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 import * as Media from "./media";
@@ -77,6 +78,42 @@ function Shell() {
     web.current?.injectJavaScript(`window.__hmFromApp && window.__hmFromApp(${JSON.stringify(m)}); true;`);
   }, []);
 
+  // Over-the-air updates: expo-updates only switches to a new update on the next
+  // cold start, so check on launch and whenever the app comes back to the front,
+  // and switch straight away when one is ready.
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    let busy = false;
+    const check = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const u = await Updates.checkForUpdateAsync();
+        if (u.isAvailable && (await Updates.fetchUpdateAsync()).isNew) await Updates.reloadAsync();
+      } catch { /* offline or no update: keep running this one */ }
+      busy = false;
+    };
+    check();
+    const sub = AppState.addEventListener("change", (s) => { if (s === "active") check(); });
+    return () => sub.remove();
+  }, []);
+
+  // Cloud sign-in (Google Drive, OneDrive, Dropbox) happens in the system browser, which
+  // returns to hypermixer://oauth?r=…; hand that result to the page once it has loaded.
+  const loaded = useRef(false);
+  const pendingAuth = useRef<string | null>(null);
+  useEffect(() => {
+    const take = (url: string | null | undefined) => {
+      const r = url && /^hypermixer:\/\/oauth\b/.test(url) ? /[?&]r=([^&#]+)/.exec(url)?.[1] : null;
+      if (!r) return;
+      if (loaded.current) send({ type: "oauth-result", r });
+      else pendingAuth.current = r;
+    };
+    Linking.getInitialURL().then(take).catch(() => {});
+    const sub = Linking.addEventListener("url", (e) => take(e.url));
+    return () => sub.remove();
+  }, [send]);
+
   const onMessage = useCallback(async (e: WebViewMessageEvent) => {
     let m: Msg;
     try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
@@ -130,7 +167,16 @@ function Shell() {
         originWhitelist={["https://*", "blob:*", "data:*"]}
         injectedJavaScriptBeforeContentLoaded={BOOT}
         onMessage={onMessage}
-        onLoadEnd={() => SplashScreen.hideAsync().catch(() => {})}
+        onLoadEnd={() => {
+          SplashScreen.hideAsync().catch(() => {});
+          loaded.current = true;
+          send({
+            type: "shell-info", version: Constants.expoConfig?.version ?? "", runtime: Updates.runtimeVersion ?? "",
+            channel: Updates.channel ?? "", update: Updates.isEmbeddedLaunch ? "" : (Updates.updateId ?? ""),
+            updatedAt: Updates.createdAt ? Updates.createdAt.toISOString() : "",
+          });
+          if (pendingAuth.current) { const r = pendingAuth.current; pendingAuth.current = null; setTimeout(() => send({ type: "oauth-result", r }), 1500); }
+        }}
         onError={() => { SplashScreen.hideAsync().catch(() => {}); setFailed(true); }}
         onShouldStartLoadWithRequest={(req: WebViewNavigation & { isTopFrame?: boolean }) => {
           const url = req.url;
