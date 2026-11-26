@@ -217,7 +217,9 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
     ["EXPIRE", `hj:b:${today()}`, String(3 * DAY)],
   ]);
 
-  const line = `${band.name} · @${found.handle} has ${short(found.followers)} · +${band.points}${streak > 1 ? ` · 🔥${streak}` : ""} · ${total} pts`;
+  // Three short lines: the verdict, the real answer, your running score.
+  const head = band.points === 3 ? "🎯 Nailed it! +3" : band.points === 1 ? "👍 Close! +1" : "❌ Miss";
+  const line = `${head}\nReal answer: ${short(found.followers)} followers\nYour score: ${total}${streak > 1 ? ` · 🔥 ${streak} in a row` : ""}`;
   return { line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak };
 }
 
