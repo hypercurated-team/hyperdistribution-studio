@@ -1,0 +1,9 @@
+{
+  "name": "hm-vision",
+  "version": "1.0.0",
+  "description": "On-device photo understanding for HyperMixer: scene labels, faces and quality, read on the phone.",
+  "main": "index.ts",
+  "license": "MIT",
+  "author": "HyperMixer",
+  "homepage": "https://hyperdistribution-studio.vercel.app"
+}

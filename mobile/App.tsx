@@ -35,7 +35,8 @@ type Msg =
   | { type: "media-change" }
   | { type: "files-pick" }
   | { type: "media-thumbs"; ids: string[] }
-  | { type: "media-file"; id: string; req: string };
+  | { type: "media-file"; id: string; req: string }
+  | { type: "vision-analyze"; ids: string[]; req: string };
 
 // Tells the page it is inside the app, and reports whether a side panel is open (for the back button).
 const BOOT = `(() => {
@@ -85,6 +86,7 @@ function Shell() {
     if (m.type === "files-pick") { Media.pickFiles(send).catch(() => {}); return; }
     if (m.type === "media-thumbs") { Media.thumbs(m.ids, send); return; }
     if (m.type === "media-file") { Media.sendFile(m.id, m.req, send); return; }
+    if (m.type === "vision-analyze") { Media.analyze(m.ids, m.req, send); return; }
     try {
       if (m.type === "save-start") {
         const name = m.name.replace(/[^\w.-]+/g, "_") || "hypermixer-file";

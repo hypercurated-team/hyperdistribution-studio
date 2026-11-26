@@ -3,6 +3,7 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { Asset, AssetField, MediaType, Query, presentPermissionsPicker, requestPermissionsAsync } from "expo-media-library";
 import * as VideoThumbnails from "expo-video-thumbnails";
+import { HmVision } from "./modules/hm-vision";
 
 /**
  * The phone's media for the HyperMixer page: the photos and videos the person
@@ -125,5 +126,22 @@ export async function sendFile(id: string, req: string, send: Send) {
     send({ type: "file-end", req });
   } catch (e) {
     send({ type: "file-error", req, error: (e as Error)?.message || "Couldn't read that file" });
+  }
+}
+
+/**
+ * What the phone sees in each photo: scene labels, faces and quality, from the
+ * native vision module (Apple Vision / ML Kit). Library photos only; picked
+ * files are skipped. Nothing leaves the phone.
+ */
+export async function analyze(ids: string[], req: string, send: Send) {
+  if (!HmVision) return send({ type: "vision-results", req, unavailable: true, results: [] });
+  const assetIds = new Map<string, string>();
+  for (const id of ids.slice(0, 60)) if (id.startsWith("p:")) assetIds.set(id.slice(2, id.lastIndexOf("|")), id);
+  try {
+    const found = assetIds.size ? await HmVision.analyze([...assetIds.keys()]) : [];
+    send({ type: "vision-results", req, results: found.map((r) => ({ ...r, id: assetIds.get(r.id) ?? r.id })) });
+  } catch (e) {
+    send({ type: "vision-results", req, error: (e as Error)?.message || "vision failed", results: [] });
   }
 }
