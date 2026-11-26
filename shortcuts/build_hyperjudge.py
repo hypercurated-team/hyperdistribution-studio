@@ -12,8 +12,8 @@ What the shortcut does, in order:
   2. Extract Text from Image (on the phone)
   3. Choose from List: 1K / 10K / 100K / 1M / 10M+
   4. Get Device Details: device name (your name on the leaderboard)
-  5. POST {text, guess, player} to <API base>/api/judge
-  6. Show Notification with the reply's `line`
+  5. POST {text, guess, player} to <API base>/api/judge?format=text
+  6. Show Notification with the reply (one plain sentence)
 """
 import plistlib
 import sys
@@ -54,7 +54,7 @@ def action(ident, params, out=None):
     return {"WFWorkflowActionIdentifier": ident, "WFWorkflowActionParameters": p}
 
 
-shot, ocr, ranges, chosen, device, reply, line = (uid() for _ in range(7))
+shot, ocr, ranges, chosen, device, reply = (uid() for _ in range(6))
 
 actions = [
     action("is.workflow.actions.comment", {"WFCommentActionText": "HyperJudge by HyperMixer. Guess the creator's followers while you watch a reel. Run it from AssistiveTouch (Settings > Accessibility > Touch > AssistiveTouch > Single-Tap > HyperJudge)."}),
@@ -70,7 +70,7 @@ actions = [
     action(
         "is.workflow.actions.downloadurl",
         {
-            "WFURL": f"{API}/api/judge",
+            "WFURL": f"{API}/api/judge?format=text",
             "WFHTTPMethod": "POST",
             "WFHTTPBodyType": "JSON",
             "ShowHeaders": False,
@@ -88,13 +88,8 @@ actions = [
         reply,
     ),
     action(
-        "is.workflow.actions.getvalueforkey",
-        {"WFInput": attachment(reply, "Contents of URL"), "WFDictionaryKey": "line", "WFGetDictionaryValueType": "Value"},
-        line,
-    ),
-    action(
         "is.workflow.actions.notification",
-        {"WFNotificationActionTitle": "HyperJudge", "WFNotificationActionBody": text_with(line, "Dictionary Value"), "WFNotificationActionSound": True},
+        {"WFNotificationActionTitle": "HyperJudge", "WFNotificationActionBody": text_with(reply, "Contents of URL"), "WFNotificationActionSound": True},
     ),
 ]
 

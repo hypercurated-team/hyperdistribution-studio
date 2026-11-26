@@ -181,24 +181,24 @@ export async function GET(req: Request) {
 }
 
 /** One round: work out the creator, look up followers, score the guess. */
-export async function POST(req: Request) {
+async function round(req: Request): Promise<Record<string, unknown> & { line: string }> {
   let body: Record<string, unknown> = {};
   try {
     const type = req.headers.get("content-type") || "";
     body = type.includes("json") ? await req.json() : Object.fromEntries((await req.formData()).entries());
   } catch {
-    return json({ line: "HyperJudge couldn't read that. Update the shortcut.", error: "bad_body" });
+    return { line: "HyperJudge couldn't read that. Update the shortcut.", error: "bad_body" };
   }
   const guess = readGuess(body.guess);
-  if (!guess) return json({ line: "Pick a guess first: 1K, 10K, 100K, 1M or 10M+.", error: "no_guess" });
+  if (!guess) return { line: "Pick a guess first: 1K, 10K, 100K, 1M or 10M+.", error: "no_guess" };
   const handle = cleanHandle(body.handle);
   const text = typeof body.text === "string" ? body.text : "";
-  if (!handle && text.trim().length < 2) return json({ line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" });
+  if (!handle && text.trim().length < 2) return { line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" };
 
   const found = await lookUp(text, handle);
-  if ("error" in found) return json({ line: found.error, error: "lookup" });
-  if (!found.handle) return json({ line: "Couldn't spot the creator on this screen. Try when their name is showing.", error: "no_handle" });
-  if (found.followers === null) return json({ line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" });
+  if ("error" in found) return { line: found.error, error: "lookup" };
+  if (!found.handle) return { line: "Couldn't spot the creator on this screen. Try when their name is showing.", error: "no_handle" };
+  if (found.followers === null) return { line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" };
 
   const band = score(guess, found.followers);
   const player = playerId(body.player);
@@ -213,5 +213,17 @@ export async function POST(req: Request) {
   ]);
 
   const line = `${band.name} · @${found.handle} has ${short(found.followers)} · +${band.points}${streak > 1 ? ` · 🔥${streak}` : ""} · ${total} pts`;
-  return json({ line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak });
+  return { line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak };
+}
+
+/**
+ * One round. The shortcut calls /api/judge?format=text and shows the reply as-is,
+ * so anything that goes wrong still reads as a sentence on the phone.
+ */
+export async function POST(req: Request) {
+  const out = await round(req);
+  if (new URL(req.url).searchParams.get("format") === "text") {
+    return new Response(out.line, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
+  return json(out);
 }
