@@ -119,13 +119,45 @@ enum HJEngine {
 
   struct Outcome { var ok: Bool; var title: String; var detail: String; var score: String }
 
-  static func judge(guess: String) async -> Outcome {
+  /// Step one: ask the server which creator the screen text shows (fast, no AI).
+  static func who(_ text: String) async -> String {
+    guard var c = URLComponents(url: hjAPI, resolvingAgainstBaseURL: false) else { return "" }
+    c.queryItems = [URLQueryItem(name: "who", value: "1")]
+    guard let url = c.url else { return "" }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    req.timeoutInterval = 10
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+    guard let (data, _) = try? await URLSession.shared.data(for: req) else { return "" }
+    return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// Step two: read "1,570 Followers" from the creator's public profile, from this phone.
+  /// Instagram turns cloud servers away, but a phone is a normal visitor.
+  static func profileCount(_ handle: String) async -> String {
+    let safe = handle.filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
+    guard !safe.isEmpty, let url = URL(string: "https://www.instagram.com/\(safe)/") else { return "" }
+    var req = URLRequest(url: url)
+    req.timeoutInterval = 8
+    req.setValue("Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)", forHTTPHeaderField: "User-Agent")
+    req.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+    guard let (data, _) = try? await URLSession.shared.data(for: req),
+          let html = String(data: data, encoding: .utf8),
+          let r = html.range(of: #"[\d.,]+\s*[KMBkmb]?\s+Followers"#, options: .regularExpression) else { return "" }
+    return String(html[r])
+  }
+
+  static func judge(guess: String, text: String? = nil, handle: String = "", profile: String = "") async -> Outcome {
     var req = URLRequest(url: hjAPI)
     req.httpMethod = "POST"
     req.timeoutInterval = 25
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     if let token = await HJStore.idToken() { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-    req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": HJStore.text, "guess": guess, "player": HJStore.player])
+    var body: [String: Any] = ["text": text ?? HJStore.text, "guess": guess, "player": HJStore.player]
+    if !handle.isEmpty { body["handle"] = handle }
+    if !profile.isEmpty { body["profile"] = profile }
+    req.httpBody = try? JSONSerialization.data(withJSONObject: body)
     guard let (data, _) = try? await URLSession.shared.data(for: req),
           let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
       return Outcome(ok: false, title: "No connection", detail: "Couldn't reach HyperJudge. Try again.", score: "")
@@ -156,19 +188,43 @@ enum HJEngine {
 
 // MARK: - Shortcuts action and island buttons
 
+/// The 13 guesses, shown as a list over the app you're in.
+enum HJGuess: String, AppEnum {
+  case k1 = "1K", k2 = "2K", k5 = "5K", k10 = "10K", k20 = "20K", k50 = "50K", k100 = "100K"
+  case k200 = "200K", k500 = "500K", m1 = "1M", m2 = "2M", m5 = "5M", m10 = "10M+"
+
+  static let typeDisplayRepresentation: TypeDisplayRepresentation = "Followers"
+  static let caseDisplayRepresentations: [HJGuess: DisplayRepresentation] = [
+    .k1: "1K", .k2: "2K", .k5: "5K", .k10: "10K", .k20: "20K", .k50: "50K", .k100: "100K",
+    .k200: "200K", .k500: "500K", .m1: "1M", .m2: "2M", .m5: "5M", .m10: "10M+",
+  ]
+}
+
 /// The Shortcuts action: Take Screenshot → Extract Text from Image → Start HyperJudge Round.
-struct StartRoundIntent: LiveActivityIntent {
+/// The whole round happens over the reel: a "How many followers?" list, then the result as
+/// a banner. Nothing opens, and there's no Dynamic Island step to chase.
+struct StartRoundIntent: AppIntent {
   static let title: LocalizedStringResource = "Start HyperJudge Round"
-  static let description = IntentDescription("Takes the text from the reel you're watching and asks for your guess in the Dynamic Island.")
+  static let description = IntentDescription("Guess the follower count of the creator on screen, without leaving the app you're in.")
+  static let openAppWhenRun = false
 
   @Parameter(title: "Text from the screen")
   var text: String
 
+  @Parameter(title: "Your guess", requestValueDialog: IntentDialog("How many followers?"))
+  var guess: HJGuess
+
   init() {}
 
-  func perform() async throws -> some IntentResult {
-    try await HJEngine.start(text: text)
-    return .result()
+  func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+    await HJEngine.close()  // clear any island left from older builds
+    HJStore.text = text
+    let handle = await HJEngine.who(text)
+    var profile = ""
+    if !handle.isEmpty { profile = await HJEngine.profileCount(handle) }
+    let r = await HJEngine.judge(guess: guess.rawValue, text: text, handle: handle, profile: profile)
+    let line = [r.title, r.detail, r.score.isEmpty ? "" : "Your score: \(r.score)"].filter { !$0.isEmpty }.joined(separator: "\n")
+    return .result(value: line, dialog: IntentDialog(stringLiteral: line))
   }
 }
 
