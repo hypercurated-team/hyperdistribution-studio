@@ -7,6 +7,7 @@ import { db, docsOf } from "../../shim/db";
 import { saveFile } from "../../shim/native";
 import { isMobile } from "../../shim/platform";
 import { auth } from "../../shim/auth";
+import { sync, SYNCED } from "../../shim/sync";
 import { claudeStatus, settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
 import { errText, Icon, Sheet, toast } from "../ui";
@@ -25,7 +26,7 @@ function useFolder() {
   return folder.state;
 }
 
-const COLS = ["brands", "posts", "renders"];
+const COLS = SYNCED;
 
 export default function Connect({ brands }: ScreenProps) {
   const [folders, setFolders] = useState<CloudId | null>(null);
@@ -36,6 +37,11 @@ export default function Connect({ brands }: ScreenProps) {
   }, []);
   const [sheet, setSheet] = useState<"" | "claude" | "license" | "heygen">("");
   const [, refresh] = useState(0);
+  useEffect(() => {
+    const on = () => refresh((n) => n + 1);
+    addEventListener("hm:sync", on);
+    return () => removeEventListener("hm:sync", on);
+  }, []);
   const f = useFolder();
   const ownKey = !!settingsStore.apiKey();
   const builtIn = claudeStatus.builtIn();
@@ -60,7 +66,7 @@ export default function Connect({ brands }: ScreenProps) {
       const data = JSON.parse(await file.text());
       if (data.app !== "hypermixer" && data.app !== "hyperdistribution-studio") throw new Error();
       let n = 0;
-      for (const c of [...COLS, "dumps"]) for (const d of data[c] ?? []) { const { id, ...rest } = d; await db.collection(c).doc(id).set(rest); n++; }
+      for (const c of COLS) for (const d of data[c] ?? []) { const { id, ...rest } = d; await db.collection(c).doc(id).set(rest); n++; }
       toast(`Imported ${n} items`);
     } catch { toast("That file isn't a HyperMixer backup"); }
   };
@@ -75,6 +81,11 @@ export default function Connect({ brands }: ScreenProps) {
   ];
 
   const acct = auth.state.session;
+  const syncLine = (who: string) => {
+    const st = sync.state;
+    const s2 = st.status === "syncing" ? "Syncing…" : st.status === "error" ? st.error : st.status === "synced" ? "Synced to your account" : "";
+    return [who, s2].filter(Boolean).join(" · ");
+  };
   return (
     <main className="screen">
       <header className="head">
@@ -90,12 +101,12 @@ export default function Connect({ brands }: ScreenProps) {
           <div className="eyebrow" id="c-acct">Account</div>
           <div className="card list">
             <div className="item">
-              <span className="mono" style={{ background: "#3846F0", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">
+              <span className="mono" style={{ background: "var(--accent)", color: "var(--accent-ink)", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">
                 {(acct?.name || acct?.email || "?").slice(0, 1).toUpperCase()}
               </span>
               <div className="grow stack" style={{ gap: 0, minWidth: 0 }}>
                 <strong className="ellipsis">{acct ? acct.name || acct.email || "Signed in" : "Not signed in"}</strong>
-                <span className="small muted ellipsis">{acct ? (acct.name && acct.email ? acct.email : "Your free AI actions follow you to any device") : "Sign in to keep your free AI actions on any device"}</span>
+                <span className="small muted ellipsis" style={sync.state.status === "error" ? { color: "var(--bad)" } : undefined}>{acct ? syncLine(acct.name && acct.email ? acct.email : "") : "Sign in to keep your brands and posts on every device"}</span>
               </div>
               {acct
                 ? <button type="button" className="btn pill" onClick={() => { auth.signOut(); toast("Signed out"); }}>Sign out</button>

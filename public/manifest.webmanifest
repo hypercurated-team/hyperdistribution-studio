@@ -1,5 +1,5 @@
 {
-  "name": "HyperMixer",
+  "name": "HyperMixer by Hypercurated",
   "short_name": "HyperMixer",
   "description": "The content engine for businesses: plan, write and edit on-brand posts and videos for every brand and channel.",
   "id": "/",
@@ -7,8 +7,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#F4F5FA",
-  "theme_color": "#3846F0",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "categories": [
     "business",
     "productivity",

@@ -4,9 +4,15 @@ import { db } from "../shim/db";
 /** The shapes HyperMixer keeps. They match the classic board's, so both read the same data. */
 export type Channel = { id: string; platform: string; handle?: string; cadence?: number };
 export type Brain = {
-  summary?: string; audience?: string; personality?: string[]; tone?: string;
+  summary?: string; audience?: string; personality?: string[]; tone?: string | Record<string, number>;
   pillars?: string[]; hooks?: string[]; dos?: string[]; donts?: string[];
 };
+/** A brain's tone as words: a sentence, or (from the classic board) sliders shown as the strongest traits. */
+export const toneText = (t: Brain["tone"]): string =>
+  typeof t === "string" ? t
+  : t && typeof t === "object" ? Object.entries(t).filter(([, v]) => typeof v === "number").sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(", ")
+  : "";
+
 export type Brand = {
   id: string; name: string; industry?: string; color?: string; color2?: string;
   links?: string[]; channels?: Channel[]; brain?: Brain; status?: string; createdAt?: number;

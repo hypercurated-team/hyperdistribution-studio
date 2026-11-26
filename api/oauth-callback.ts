@@ -7,8 +7,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 function page(title: string, body: string, script = "") {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.45 -apple-system,system-ui,sans-serif;background:#F4F5FA;color:#141622;padding:24px;box-sizing:border-box;text-align:center}
-@media (prefers-color-scheme:dark){body{background:#0E1017;color:#ECEEF6}}a{display:inline-block;margin-top:16px;padding:12px 20px;border-radius:12px;background:#3846F0;color:#fff;text-decoration:none;font-weight:600}</style></head>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.45 -apple-system,system-ui,sans-serif;background:#FFFFFF;color:#000000;padding:24px;box-sizing:border-box;text-align:center}
+@media (prefers-color-scheme:dark){body{background:#000000;color:#FFFFFF}a{background:#B9A1FF!important;color:#000!important}}a{display:inline-block;margin-top:16px;padding:12px 20px;border-radius:22px;background:#6E3FD1;color:#fff;text-decoration:none;font-weight:600}</style></head>
 <body><div><h1 style="font-size:22px;margin:0 0 8px">${esc(title)}</h1>${body}</div>${script}</body></html>`,
     { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } },
   );

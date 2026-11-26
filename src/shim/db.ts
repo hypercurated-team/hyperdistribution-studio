@@ -15,6 +15,9 @@ const listeners = new Map<string, Set<Listener>>();
 /** Extra read-only docs merged into a collection (e.g. files from the connected folder). */
 const virtual = new Map<string, () => Map<string, Data>>();
 let loaded: Promise<void> | null = null;
+/** Told about every change made on this device (account sync pushes them). */
+const writeHooks = new Set<(name: string, id: string, data: Data | null) => void>();
+export const onLocalWrite = (fn: (name: string, id: string, data: Data | null) => void) => { writeHooks.add(fn); return () => writeHooks.delete(fn); };
 
 const col = (name: string) => {
   if (!cols.has(name)) cols.set(name, new Map());
@@ -50,17 +53,25 @@ function emit(name: string) {
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const clean = (d: Data) => JSON.parse(JSON.stringify(d)) as Data;
 
+async function put(name: string, id: string, data: Data | null) {
+  await load();
+  if (data === null) {
+    col(name).delete(id);
+    await del(`${name}/${id}`, store);
+  } else {
+    col(name).set(id, data);
+    await set(`${name}/${id}`, data, store);
+  }
+  emit(name);
+}
+
+/** Writes a change that came from the person's account (not echoed back to it). */
+export const applyRemote = (name: string, id: string, data: Data | null) => put(name, id, data === null ? null : clean(data));
+
 function docRef(name: string, id: string) {
   const write = async (data: Data | null) => {
-    await load();
-    if (data === null) {
-      col(name).delete(id);
-      await del(`${name}/${id}`, store);
-    } else {
-      col(name).set(id, data);
-      await set(`${name}/${id}`, data, store);
-    }
-    emit(name);
+    await put(name, id, data);
+    writeHooks.forEach((fn) => { try { fn(name, id, data); } catch (e) { console.error(e); } });
   };
   return {
     id,
@@ -131,4 +142,6 @@ export function setVirtual(name: string, fn: () => Map<string, Data>) {
   emit(name);
 }
 export const refresh = emit;
+/** This device's stored docs in a collection (not virtual ones), for sync. */
+export const storedDocs = async (name: string) => { await load(); return new Map(col(name)); };
 export const docsOf = async (name: string) => { await load(); return snapshot(name).docs.map((d) => ({ ...d.data(), id: d.id })); };

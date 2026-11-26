@@ -60,7 +60,7 @@ function Shell() {
   const panelOpen = useRef(false);
   const [failed, setFailed] = useState(false);
   const dark = useColorScheme() === "dark";
-  const bg = dark ? "#0E1017" : "#F4F5FA";
+  const bg = dark ? "#000000" : "#FFFFFF";
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -225,6 +225,6 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
   title: { fontSize: 22, fontWeight: "600" },
   body: { fontSize: 15, textAlign: "center", lineHeight: 21 },
-  button: { marginTop: 8, backgroundColor: "#3846F0", borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },
+  button: { marginTop: 8, backgroundColor: "#6E3FD1", borderRadius: 22, paddingHorizontal: 20, paddingVertical: 12 },
   buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
 });

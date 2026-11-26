@@ -15,6 +15,7 @@ import { phone } from "../shim/phone";
 import { clouds } from "../shim/clouds";
 import App from "./App";
 import { auth } from "../shim/auth";
+import { sync } from "../shim/sync";
 import { SignInRelay } from "./screens/SignIn";
 import "./app.css";
 
@@ -26,7 +27,10 @@ import "./app.css";
   }
   setupNative();
   // Learn whether Claude is built in before the first screen, but never wait long for it.
-  await Promise.race([Promise.all([claudeStatus.refresh(), auth.setup()]), new Promise((r) => setTimeout(r, 1500))]);
+  const authReady = auth.setup();
+  await Promise.race([Promise.all([claudeStatus.refresh(), authReady]), new Promise((r) => setTimeout(r, 1500))]);
+  // Signed in: keep brands, posts and the rest in step with the person's account.
+  authReady.then(() => sync.setup()).catch(() => {});
   await registerWorker();
   createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
   startRenderer();
