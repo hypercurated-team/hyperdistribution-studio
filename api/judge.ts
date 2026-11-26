@@ -141,8 +141,13 @@ function parseJson(text: string): Record<string, unknown> | null {
 
 const NOT_HANDLES = new Set(["follow", "following", "reels", "reel", "sponsored", "original", "audio", "liked", "share", "more", "verified"]);
 const asHandle = (line: string) => {
-  const m = line.trim().replace(/\s*[✓✔☑]\s*$/u, "").match(/^@?([A-Za-z0-9._]{2,30})$/);
-  return m && !NOT_HANDLES.has(m[1].toLowerCase()) && /[a-z]/i.test(m[1]) ? m[1].toLowerCase() : null;
+  // A username, optionally followed by a short badge glyph that OCR reads as ©, ⊙, ✓, O …
+  const m = line.trim().match(/^@?([A-Za-z0-9._]{2,30})(?:\s+\S{1,2})?$/u);
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  // Like/share counts ("11.5K", "1,851") look like usernames to a regex; they aren't.
+  if (/^[\d.,]+[kmb]?$/i.test(h) || NOT_HANDLES.has(h) || !/[a-z]/i.test(h)) return null;
+  return h;
 };
 
 /**
@@ -157,21 +162,74 @@ export function handleFromText(text: string): string | null {
     if (same && asHandle(same[1])) return asHandle(same[1]);
     if (!/^(?:Follow|Following)$/i.test(lines[i])) continue;
     for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-      const h = asHandle(lines[j]);
+      // Collab reels show "creator and partner" (or "and 2 others"): the first name posted it.
+      const collab = lines[j].match(/^@?([A-Za-z0-9._]{2,30})(?:\s+\S{1,2})?\s+and\s+\S+/i);
+      const h = asHandle(collab ? collab[1] : lines[j]);
       if (h) return h;
     }
-    for (let j = i + 1; j <= Math.min(lines.length - 1, i + 2); j++) {
-      const h = asHandle(lines[j]);
-      if (h) return h;
-    }
+    // Some OCR orders put the name just after the button, but never a count or the caption.
+    const next = lines[i + 1] && asHandle(lines[i + 1]);
+    if (next) return next;
   }
   return null;
 }
+
+/**
+ * Instagram's official count: Graph API Business Discovery, through one of our own
+ * Instagram professional accounts. Works for creator and business profiles (most reel
+ * creators); returns null for personal accounts or when it isn't set up.
+ *   IG_USER_ID       the Instagram professional account id that asks (instagram_business_account)
+ *   IG_ACCESS_TOKEN  a long-lived token with instagram_basic + pages_show_list (+ business_management)
+ *   IG_GRAPH_VERSION optional, e.g. v23.0
+ */
+export async function businessDiscovery(handle: string): Promise<number | null> {
+  const id = process.env.IG_USER_ID;
+  const token = process.env.IG_ACCESS_TOKEN;
+  if (!id || !token) return null;
+  const v = process.env.IG_GRAPH_VERSION || "v23.0";
+  const fields = `business_discovery.username(${handle}){followers_count,username}`;
+  const url = `https://graph.facebook.com/${v}/${encodeURIComponent(id)}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+  const j = (await res?.json().catch(() => null)) as { business_discovery?: { followers_count?: number } } | null;
+  const n = j?.business_discovery?.followers_count;
+  return typeof n === "number" && n >= 0 ? n : null;
+}
+
+/**
+ * MVP count: the follower line in the public profile page's description
+ * ("12.3K Followers, 210 Following, 85 Posts"). Instagram may show a login page to
+ * servers instead, in which case this returns null and Claude's search takes over.
+ */
+export function countFromProfileHtml(html: string): number | null {
+  const tag = (html.match(/<meta[^>]*>/gi) ?? []).find((t) => /(?:property|name)="(?:og:description|description)"/i.test(t)) ?? "";
+  const desc = tag.match(/content="([^"]+)"/i)?.[1] ?? "";
+  const m = desc.replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, "")) * ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[(m[2] || "").toUpperCase()] || Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+}
+
+export async function publicCount(handle: string): Promise<number | null> {
+  const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
+    headers: { "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(6000),
+  }).catch(() => null);
+  if (!res?.ok) return null;
+  return countFromProfileHtml(await res.text().catch(() => ""));
+}
+
+const remember = async (found: Found) => {
+  if (found.handle && found.followers !== null) await kv([["SET", `hj:f2:${found.handle}`, String(found.followers), "EX", String(DAY)]]);
+  return found;
+};
 
 async function lookUp(text: string, handle: string | null): Promise<Found | { error: string }> {
   if (handle) {
     const cached = (await kv([["GET", `hj:f2:${handle}`]]))[0];
     if (cached) return { handle, followers: Number(cached) };
+    const direct = (await businessDiscovery(handle)) ?? (await publicCount(handle));
+    if (direct !== null) return remember({ handle, followers: direct });
   }
   if (!(process.env.HDS_SHARED_KEY === "true" && process.env.ANTHROPIC_API_KEY)) return { error: "Claude isn't switched on for HyperMixer yet." };
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -201,8 +259,9 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
     const raw = out?.followers;
     const f = typeof raw === "number" ? Math.round(raw) : typeof raw === "string" ? (readGuess(raw)?.value ?? NaN) : NaN;
     const found: Found = { handle: h, followers: Number.isFinite(f) && f > 0 ? Math.round(f) : null };
-    if (found.handle && found.followers !== null) await kv([["SET", `hj:f2:${found.handle}`, String(found.followers), "EX", String(DAY)]]);
-    return found;
+    // Claude found the handle but no count: ask Instagram's API for the handle it found.
+    if (found.handle && found.followers === null && found.handle !== handle) found.followers = (await businessDiscovery(found.handle)) ?? (await publicCount(found.handle));
+    return remember(found);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) return { error: "HyperJudge is busy. Try again in a minute." };
     return { error: "Couldn't reach the lookup right now. Try again." };

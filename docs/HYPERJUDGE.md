@@ -25,6 +25,18 @@ Today's leaderboard: `GET /api/judge?board=1`.
 
 Each new account costs one Claude call with up to 3 web searches; lookups are cached for a day.
 
+## Follower counts (Instagram Graph API)
+
+Counts come from Instagram's Business Discovery API first, then Claude with web search as a
+fallback (personal accounts aren't covered by the API). Set in Vercel:
+
+- `IG_USER_ID`: the id of one of our Instagram professional accounts (linked to a Facebook Page).
+- `IG_ACCESS_TOKEN`: a long-lived token for it with `instagram_basic`, `pages_show_list` and
+  `business_management`. A System User token from Meta Business Settings doesn't expire.
+- `IG_GRAPH_VERSION` (optional), e.g. `v23.0`.
+
+Find the id with `GET /me/accounts?fields=instagram_business_account` in the Graph API Explorer.
+
 ## The shortcut file
 
 `shortcuts/build_hyperjudge.py` writes the shortcut. iOS only imports signed shortcuts, so sign it on a Mac:
