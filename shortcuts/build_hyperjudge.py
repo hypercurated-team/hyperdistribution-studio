@@ -11,9 +11,11 @@ What the shortcut does, in order:
   1. Take Screenshot (the reel you're watching)
   2. Extract Text from Image (on the phone)
   3. Choose from List: a scrolling list, 1K, 2K, 5K … 5M, 10M+
-  4. Get Device Details: device name (your name on the leaderboard)
-  5. POST {text, guess, player} to <API base>/api/judge?format=text
-  6. Show Notification with the reply (three short lines)
+  4. Text: your leaderboard code (asked once when you add the shortcut;
+     copy it from the HyperJudge app's Setup tab, or leave it blank)
+  5. Get Device Details: device name (the guest name when there's no code)
+  6. POST {text, guess, code, player} to <API base>/api/judge?format=text
+  7. Show Notification with the reply (three short lines)
 """
 import plistlib
 import sys
@@ -54,7 +56,7 @@ def action(ident, params, out=None):
     return {"WFWorkflowActionIdentifier": ident, "WFWorkflowActionParameters": p}
 
 
-shot, ocr, ranges, chosen, device, reply = (uid() for _ in range(6))
+shot, ocr, ranges, chosen, code, device, reply = (uid() for _ in range(7))
 
 actions = [
     action("is.workflow.actions.comment", {"WFCommentActionText": "HyperJudge by HyperMixer. Guess the creator's followers while you watch a reel. Run it from AssistiveTouch (Settings > Accessibility > Touch > AssistiveTouch > Single-Tap > HyperJudge)."}),
@@ -66,6 +68,7 @@ actions = [
         {"WFInput": attachment(ranges, "List"), "WFChooseFromListActionPrompt": "How many followers?"},
         chosen,
     ),
+    action("is.workflow.actions.gettext", {"WFTextActionText": ""}, code),
     action("is.workflow.actions.getdevicedetails", {"WFDeviceDetail": "Device Name"}, device),
     action(
         "is.workflow.actions.downloadurl",
@@ -79,6 +82,7 @@ actions = [
                     "WFDictionaryFieldValueItems": [
                         {"WFItemType": 0, "WFKey": plain("text"), "WFValue": text_with(ocr, "Text from Image")},
                         {"WFItemType": 0, "WFKey": plain("guess"), "WFValue": text_with(chosen, "Chosen Item")},
+                        {"WFItemType": 0, "WFKey": plain("code"), "WFValue": text_with(code, "Text")},
                         {"WFItemType": 0, "WFKey": plain("player"), "WFValue": text_with(device, "Device Details")},
                     ]
                 },
@@ -93,12 +97,22 @@ actions = [
     ),
 ]
 
+CODE_INDEX = next(i for i, a in enumerate(actions) if a["WFWorkflowActionIdentifier"] == "is.workflow.actions.gettext")
+
 shortcut = {
     "WFWorkflowMinimumClientVersion": 900,
     "WFWorkflowMinimumClientVersionString": "900",
     "WFWorkflowClientVersion": "2302.0.4",
     "WFWorkflowIcon": {"WFWorkflowIconStartColor": 463140863, "WFWorkflowIconGlyphNumber": 59511},
-    "WFWorkflowImportQuestions": [],
+    "WFWorkflowImportQuestions": [
+        {
+            "ActionIndex": CODE_INDEX,
+            "Category": "Parameter",
+            "DefaultValue": "",
+            "ParameterKey": "WFTextActionText",
+            "Text": "Your leaderboard code from the HyperJudge app (Setup tab), like HJ-7K2M9Q. Leave blank to play as a guest.",
+        }
+    ],
     "WFWorkflowTypes": [],
     "WFQuickActionSurfaces": [],
     "WFWorkflowInputContentItemClasses": [],

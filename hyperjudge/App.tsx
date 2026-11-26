@@ -106,7 +106,7 @@ export default function App() {
         ) : tab === "board" ? (
           <Board c={c} me={me} onSignIn={() => setSignIn(true)} />
         ) : (
-          <Setup c={c} onDone={() => setTab("play")} />
+          <Setup c={c} me={me} onSignIn={() => setSignIn(true)} onDone={() => setTab("play")} />
         )}
         <SignInSheet c={c} open={signIn} me={me} onClose={() => setSignIn(false)} onChange={() => setMe(auth.account())} />
       </SafeAreaView>
@@ -175,7 +175,7 @@ function Play({ c, onSetup }: { c: C; onSetup: () => void }) {
 
   return (
     <ScrollView contentContainerStyle={s.content}>
-      {!(auth.get("setupSteps") ?? "").split(",").includes("shortcut2") ? (
+      {!(auth.get("setupSteps") ?? "").split(",").includes("shortcut3") ? (
         <Pressable onPress={onSetup} style={({ pressed }) => [s.banner, { backgroundColor: c.band, opacity: pressed ? 0.7 : 1 }]}>
           <Text style={[s.body, { color: c.text, flex: 1 }]}>Add the new shortcut so rounds stay inside Instagram.</Text>
           <Text style={[s.body, { color: BLUE, fontWeight: "600" }]}>Set up</Text>
@@ -208,12 +208,39 @@ function Play({ c, onSetup }: { c: C; onSetup: () => void }) {
 const verdictColor = (title: string, c: C) => (/Nailed/.test(title) ? GOLD : /Close/.test(title) ? BLUE : /Miss/.test(title) ? RED : c.text);
 
 /** The three things to do once. Each row is the button; a tick shows what's done. */
-function Setup({ c, onDone }: { c: C; onDone: () => void }) {
-  const [done, setDone] = useState(() => (auth.get("setupSteps") ?? "").split(",").filter((id) => id && id !== "shortcut"));
+function Setup({ c, me, onSignIn, onDone }: { c: C; me: auth.Account | null; onSignIn: () => void; onDone: () => void }) {
+  const [done, setDone] = useState(() => (auth.get("setupSteps") ?? "").split(",").filter((id) => id && id !== "shortcut" && id !== "shortcut2"));
   const [note, setNote] = useState("");
+  // Your leaderboard code: the shortcut can't sign in, so it sends this instead.
+  const [code, setCode] = useState(() => (me ? auth.get("code") ?? "" : ""));
+  useEffect(() => {
+    if (!me) return setCode("");
+    let live = true;
+    (async () => {
+      const token = await auth.idToken();
+      if (!token) return;
+      const r = await fetch(`${auth.WEB}/api/judge?code=1`, { headers: { authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      if (live && j.code) {
+        auth.set("code", j.code);
+        setCode(j.code);
+      }
+    })().catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [me?.uid]);
   const steps: { id: string; title: string; detail: string; action: string; run: () => Promise<void> }[] = [
-    // "shortcut2": the round now runs inside the shortcut, so everyone adds the new one once.
-    { id: "shortcut2", title: "Add the shortcut", detail: "In the share sheet, pick Shortcuts, then Add Shortcut. Already have an older one? Replace it.", action: "Add", run: addShortcut },
+    // "shortcut3": the shortcut now asks for your leaderboard code, so everyone adds it once more.
+    {
+      id: "shortcut3",
+      title: "Add the shortcut",
+      detail: code
+        ? "Pick Shortcuts in the share sheet. When it asks, paste your code from above. Have an older one? Replace it."
+        : "Pick Shortcuts in the share sheet, then Add Shortcut. Have an older one? Replace it.",
+      action: "Add",
+      run: addShortcut,
+    },
     { id: "touch", title: "Put it on AssistiveTouch", detail: "Turn on AssistiveTouch, then set Single-Tap to HyperJudge. Back Tap works too.", action: "Open", run: openAssistiveTouch },
     { id: "insta", title: "Play on a reel", detail: "Tap the button on any reel, pick a guess, and the answer shows up as a banner.", action: "Open", run: openInstagram },
   ];
@@ -228,6 +255,18 @@ function Setup({ c, onDone }: { c: C; onDone: () => void }) {
   return (
     <ScrollView contentContainerStyle={s.content}>
       <Text style={[s.lede, { color: c.dim }]}>Three taps, once. After that, HyperJudge is one tap away on any reel.</Text>
+      {me ? (
+        <View style={[s.card, { backgroundColor: c.card, alignItems: "center", gap: 6 }]}>
+          <Text style={[s.small, { color: c.dim }]}>Your leaderboard code</Text>
+          <Text selectable style={[s.code, { color: c.text }]}>{code || "…"}</Text>
+          <Text style={[s.small, { color: c.dim, textAlign: "center" }]}>Press and hold to copy it. Rounds then count for {me.name || me.email.split("@")[0]}.</Text>
+        </View>
+      ) : (
+        <Pressable onPress={onSignIn} style={({ pressed }) => [s.banner, { backgroundColor: c.band, opacity: pressed ? 0.7 : 1 }]}>
+          <Text style={[s.body, { color: c.text, flex: 1 }]}>Sign in first to get a code, so your rounds count on the leaderboard.</Text>
+          <Text style={[s.body, { color: BLUE, fontWeight: "600" }]}>Sign in</Text>
+        </Pressable>
+      )}
       <View style={[s.group, { backgroundColor: c.card }]}>
         {steps.map((st, i) => {
           const ok = done.includes(st.id);
@@ -492,6 +531,7 @@ const s = StyleSheet.create({
   button: { backgroundColor: BLUE, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 8 },
   buttonText: { color: "#FFFFFF", fontSize: 17, fontWeight: "600" },
   small: { fontSize: 13 },
+  code: { fontSize: 28, fontWeight: "700", letterSpacing: 2, fontVariant: ["tabular-nums"] },
   resultTitle: { fontSize: 22, fontWeight: "700" },
   body: { fontSize: 15, lineHeight: 20 },
   section: { fontSize: 13, marginTop: 4, marginLeft: 16 },
