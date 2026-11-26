@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  Linking,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -47,6 +48,16 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(() => (auth.get("setupDone") === "1" ? "play" : "setup"));
   const [me, setMe] = useState(auth.account);
   const [signIn, setSignIn] = useState(false);
+
+  // Tapping the Dynamic Island opens hyperjudge://wheel: go straight to the wheel.
+  useEffect(() => {
+    const go = (url?: string | null) => {
+      if (url?.startsWith("hyperjudge://wheel")) setTab("play");
+    };
+    Linking.getInitialURL().then(go).catch(() => {});
+    const sub = Linking.addEventListener("url", (e) => go(e.url));
+    return () => sub.remove();
+  }, []);
 
   return (
     <SafeAreaProvider>
@@ -153,7 +164,9 @@ function Play({ c, onSetup }: { c: C; onSetup: () => void }) {
       ) : null}
 
       <View style={[s.card, { backgroundColor: c.card }]}>
-        <Text style={[s.prompt, { color: c.dim }]}>How many followers?</Text>
+        <Text style={[s.prompt, { color: c.dim }]}>
+          {auth.get("text") && !busy ? "Spin to your guess, then lock it in." : "How many followers?"}
+        </Text>
         <View style={s.wheelWrap}>
           <View pointerEvents="none" style={[s.band, { backgroundColor: c.band }]} />
           <ScrollView
