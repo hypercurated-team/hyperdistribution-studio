@@ -12,11 +12,11 @@ import Anthropic from "@anthropic-ai/sdk";
  * the follower count with web search. Counts are cached for a day.
  *
  * Scoring (kept simple on purpose):
- *   a range guess (1K / 10K / 100K / 1M / 10M+): right range = 3, next range = 1, else 0
- *   a number guess (e.g. 42000): within 25% = 3, within 2× = 1, else 0
+ *   the guess snaps to the nearest step of a 13-step list (1K, 2K, 5K … 5M, 10M+).
+ *   Same step as the real count = 3, the step next to it = 1, else 0.
  *
  * Reply: { line, band, points, followers, handle, total, streak }. `line` is the
- * one sentence the shortcut shows as a notification. Problems also answer 200 with
+ * short text the shortcut shows as a notification. Problems also answer 200 with
  * a `line` (and an `error` code), so the shortcut always has something to show.
  *
  * GET /api/judge?board=1 → today's top players.
@@ -73,35 +73,31 @@ async function kv(cmd: string[][]): Promise<unknown[]> {
 }
 
 /* ---------- scoring ---------- */
-export const RANGES = [
-  { label: "1K", lo: 0, hi: 5_000 },
-  { label: "10K", lo: 5_000, hi: 50_000 },
-  { label: "100K", lo: 50_000, hi: 500_000 },
-  { label: "1M", lo: 500_000, hi: 5_000_000 },
-  { label: "10M+", lo: 5_000_000, hi: Infinity },
-];
+/** The scrollable guess list: about two steps per 10x, so one flick covers 1K to 10M+. */
+export const STEPS = [1e3, 2e3, 5e3, 1e4, 2e4, 5e4, 1e5, 2e5, 5e5, 1e6, 2e6, 5e6, 1e7];
+export const RANGES = STEPS.map((v, i) => ({ label: short(v) + (i === STEPS.length - 1 ? "+" : ""), value: v }));
 const BANDS = { nailed: { name: "Nailed it", points: 3 }, close: { name: "Close", points: 1 }, miss: { name: "Miss", points: 0 } };
 
-/** "10K", "1.5M", "42000", "10M+" → a number, or a range index when it names a range. */
-export function readGuess(raw: unknown): { range?: number; value?: number } | null {
+/** "10K", "1.5M", "42000", "10M+" → a number of followers. */
+export function readGuess(raw: unknown): { value: number } | null {
   const s = String(raw ?? "").trim().toUpperCase().replace(/[,\s]/g, "");
-  const r = RANGES.findIndex((x) => x.label === s || x.label === s + "+");
-  if (r >= 0) return { range: r };
   const m = s.match(/^(\d+(?:\.\d+)?)([KMB]?)\+?$/);
   if (!m) return null;
-  const value = Number(m[1]) * ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[m[2]] || Number(m[1]);
+  const value = Number(m[1]) * (({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[m[2]] ?? 1);
   return value > 0 ? { value } : null;
 }
 
-export function score(guess: { range?: number; value?: number }, actual: number) {
-  if (guess.range !== undefined) {
-    const at = RANGES.findIndex((x) => actual >= x.lo && actual < x.hi);
-    const d = Math.abs(at - guess.range);
-    return d === 0 ? BANDS.nailed : d === 1 ? BANDS.close : BANDS.miss;
-  }
-  const v = guess.value!;
-  const r = Math.max(v / actual, actual / v);
-  return r <= 1.25 ? BANDS.nailed : r <= 2 ? BANDS.close : BANDS.miss;
+/** Which list step a number is closest to (on a log scale). */
+export function step(n: number) {
+  let best = 0;
+  for (let i = 1; i < STEPS.length; i++) if (Math.abs(Math.log(n / STEPS[i])) < Math.abs(Math.log(n / STEPS[best]))) best = i;
+  return best;
+}
+
+/** Same step as the real count = 3, the step next to it = 1, anything else = 0. */
+export function score(guess: { value: number }, actual: number) {
+  const d = Math.abs(step(guess.value) - step(Math.max(actual, 1)));
+  return d === 0 ? BANDS.nailed : d === 1 ? BANDS.close : BANDS.miss;
 }
 
 export function short(n: number) {
@@ -195,7 +191,7 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
     return { line: "HyperJudge couldn't read that. Update the shortcut.", error: "bad_body" };
   }
   const guess = readGuess(body.guess);
-  if (!guess) return { line: "Pick a guess first: 1K, 10K, 100K, 1M or 10M+.", error: "no_guess" };
+  if (!guess) return { line: "Pick a guess first, e.g. 10K or 2M.", error: "no_guess" };
   const handle = cleanHandle(body.handle);
   const text = typeof body.text === "string" ? body.text : "";
   if (!handle && text.trim().length < 2) return { line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" };
