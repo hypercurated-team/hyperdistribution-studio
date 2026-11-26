@@ -23,7 +23,6 @@ export const CLOUDS: { id: CloudId; name: string; g: string; c: string }[] = [
 
 const EXT = /\.(jpe?g|png|webp|gif|heic|heif|avif|mp4|mov|m4v|webm)$/i;
 const VIDEO = /\.(mp4|mov|m4v|webm)$/i;
-const MAX_ITEMS = 20000;
 const store = createStore("hm-clouds", "accounts");
 
 type CloudState = { configured: boolean; account: string; folders: Folder[]; items: Item[]; indexing: boolean; error: string };
@@ -186,23 +185,29 @@ export const clouds = {
     await save(p);
     await clouds.index(p);
   },
-  /** Lists the photos and videos in the chosen folders (and their subfolders, a few levels deep). */
+  /** Lists every photo and video in the chosen folders and all their subfolders. No cap. */
   async index(p: CloudId) {
     const s = state[p];
     if (s.indexing) return;
     s.indexing = true; s.error = ""; changed();
-    const found: Item[] = [];
+    const found = new Map<string, Item>();
+    const seen = new Set<string>();
     try {
-      const walk = async (id: string, depth: number) => {
+      const walk = async (id: string) => {
+        if (seen.has(id)) return; // a folder chosen twice, or inside another chosen one
+        seen.add(id);
         for (const e of await children(p, id)) {
-          if (found.length >= MAX_ITEMS) return;
-          if (e.folder) { if (depth < 4) await walk(e.id, depth + 1); }
-          else if (EXT.test(e.name)) found.push(toItem(p, e));
+          if (e.folder) await walk(e.id);
+          else if (EXT.test(e.name)) {
+            const it = toItem(p, e);
+            found.set(it.id, it);
+            if (found.size % 2000 === 0) { s.items = [...found.values()]; changed(); } // count climbs while it reads
+          }
         }
       };
-      for (const f of s.folders) await walk(f.id, 0);
-      s.items.forEach((i) => { if (!found.some((f) => f.id === i.id)) byId.delete(i.id); });
-      s.items = found.sort((a, b) => b.takenAt - a.takenAt);
+      for (const f of s.folders) await walk(f.id);
+      s.items.forEach((i) => { if (!found.has(i.id)) byId.delete(i.id); });
+      s.items = [...found.values()].sort((a, b) => b.takenAt - a.takenAt);
     } catch (e) { s.error = (e as Error).message; }
     finally { s.indexing = false; changed(); }
   },

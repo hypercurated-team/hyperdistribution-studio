@@ -53,7 +53,7 @@ export default function CloudFolders({ provider, onClose }: { provider: CloudId;
             </div>
           ))}
       </div>
-      {chosen.length > 0 && <p className="small muted" style={{ margin: 0 }}>Using: {chosen.map((f) => f.name).join(", ")}. Subfolders are included, a few levels deep.</p>}
+      {chosen.length > 0 && <p className="small muted" style={{ margin: 0 }}>Using: {chosen.map((f) => f.name).join(", ")}. All subfolders are included.</p>}
       <button type="button" className="btn block primary" onClick={done}>Done</button>
     </Sheet>
   );
