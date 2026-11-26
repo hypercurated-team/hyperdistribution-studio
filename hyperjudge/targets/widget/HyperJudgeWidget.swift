@@ -51,7 +51,8 @@ struct HJLiveActivity: Widget {
       } minimal: {
         Image(systemName: "wand.and.stars").foregroundStyle(hjBlue)
       }
-      .widgetURL(URL(string: "hyperjudge://wheel"))
+      // No widgetURL on the island: a tap that misses a button must not pull you out of
+      // Instagram. The Lock Screen version still opens the wheel.
     }
   }
 

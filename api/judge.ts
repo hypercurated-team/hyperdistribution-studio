@@ -141,8 +141,13 @@ function parseJson(text: string): Record<string, unknown> | null {
 
 const NOT_HANDLES = new Set(["follow", "following", "reels", "reel", "sponsored", "original", "audio", "liked", "share", "more", "verified"]);
 const asHandle = (line: string) => {
-  const m = line.trim().replace(/\s*[✓✔☑]\s*$/u, "").match(/^@?([A-Za-z0-9._]{2,30})$/);
-  return m && !NOT_HANDLES.has(m[1].toLowerCase()) && /[a-z]/i.test(m[1]) ? m[1].toLowerCase() : null;
+  // A username, optionally followed by a short badge glyph that OCR reads as ©, ⊙, ✓, O …
+  const m = line.trim().match(/^@?([A-Za-z0-9._]{2,30})(?:\s+\S{1,2})?$/u);
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  // Like/share counts ("11.5K", "1,851") look like usernames to a regex; they aren't.
+  if (/^[\d.,]+[kmb]?$/i.test(h) || NOT_HANDLES.has(h) || !/[a-z]/i.test(h)) return null;
+  return h;
 };
 
 /**
@@ -158,14 +163,13 @@ export function handleFromText(text: string): string | null {
     if (!/^(?:Follow|Following)$/i.test(lines[i])) continue;
     for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
       // Collab reels show "creator and partner" (or "and 2 others"): the first name posted it.
-      const collab = lines[j].match(/^@?([A-Za-z0-9._]{2,30})\s+and\s+\S+/i);
+      const collab = lines[j].match(/^@?([A-Za-z0-9._]{2,30})(?:\s+\S{1,2})?\s+and\s+\S+/i);
       const h = asHandle(collab ? collab[1] : lines[j]);
       if (h) return h;
     }
-    for (let j = i + 1; j <= Math.min(lines.length - 1, i + 2); j++) {
-      const h = asHandle(lines[j]);
-      if (h) return h;
-    }
+    // Some OCR orders put the name just after the button, but never a count or the caption.
+    const next = lines[i + 1] && asHandle(lines[i + 1]);
+    if (next) return next;
   }
   return null;
 }
