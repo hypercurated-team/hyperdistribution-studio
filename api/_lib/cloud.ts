@@ -39,7 +39,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     authorize: "https://accounts.google.com/o/oauth2/v2/auth",
     token: "https://oauth2.googleapis.com/token",
     scope: "https://www.googleapis.com/auth/drive.readonly openid email",
-    extra: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
+    extra: { access_type: "offline", prompt: "consent" }, // no include_granted_scopes: the client may be shared, and a Drive token must not pick up other grants (e.g. gmail.send)
     account: async (t) => {
       const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { authorization: `Bearer ${t}` } });
       return ((await r.json().catch(() => ({}))) as { email?: string }).email ?? "";
