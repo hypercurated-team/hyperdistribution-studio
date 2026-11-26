@@ -132,7 +132,7 @@ function parseJson(text: string): Record<string, unknown> | null {
 
 async function lookUp(text: string, handle: string | null): Promise<Found | { error: string }> {
   if (handle) {
-    const cached = (await kv([["GET", `hj:f:${handle}`]]))[0];
+    const cached = (await kv([["GET", `hj:f2:${handle}`]]))[0];
     if (cached) return { handle, followers: Number(cached) };
   }
   if (!(process.env.HDS_SHARED_KEY === "true" && process.env.ANTHROPIC_API_KEY)) return { error: "Claude isn't switched on for HyperMixer yet." };
@@ -147,18 +147,23 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "low" },
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
+      tools: [
+        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 },
+        { type: "web_search_20260209", name: "web_search", max_uses: 3 },
+      ],
       system:
-        "You look up Instagram follower counts. Use web search (the profile page, social stats sites or recent articles). Reply with only JSON: {\"handle\": \"username without @, or null if you can't tell\", \"followers\": integer or null}. Use null rather than guessing a count you didn't find.",
+        "You look up Instagram follower counts. Once you know the username, first fetch https://www.instagram.com/<username>/ (its page description usually reads like \"12.3K Followers, 210 Following, 85 Posts\"). If that page gives no count, use web search (social stats sites, recent articles, the creator's other profiles). Reply with only JSON: {\"handle\": \"username without @, or null if you can't tell\", \"followers\": the follower count as a whole number, or null}. Use null rather than guessing a count you didn't find; never answer 0 unless a page says 0.",
       messages: [{ role: "user", content: task }],
     });
     if (res.stop_reason === "refusal") return { error: "Couldn't look that account up." };
     const textOut = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     const out = parseJson(textOut);
     const h = cleanHandle(out?.handle) ?? handle;
-    const f = Math.round(Number(out?.followers));
-    const found: Found = { handle: h, followers: Number.isFinite(f) && f >= 0 ? f : null };
-    if (found.handle && found.followers !== null) await kv([["SET", `hj:f:${found.handle}`, String(found.followers), "EX", String(DAY)]]);
+    // A missing count must stay missing: Number(null) is 0, which once scored as a real answer.
+    const raw = out?.followers;
+    const f = typeof raw === "number" ? Math.round(raw) : typeof raw === "string" ? (readGuess(raw)?.value ?? NaN) : NaN;
+    const found: Found = { handle: h, followers: Number.isFinite(f) && f > 0 ? Math.round(f) : null };
+    if (found.handle && found.followers !== null) await kv([["SET", `hj:f2:${found.handle}`, String(found.followers), "EX", String(DAY)]]);
     return found;
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) return { error: "HyperJudge is busy. Try again in a minute." };
