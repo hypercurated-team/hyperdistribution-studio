@@ -7,12 +7,14 @@ shortcut from the AssistiveTouch button, so you never leave Instagram.
 
 1. Tap the AssistiveTouch button on a reel.
 2. The shortcut takes one screenshot and reads its text on the phone (nothing is recorded).
-3. Pick a range: 1K, 10K, 100K, 1M or 10M+.
+3. Scroll the list and pick a guess: 1K, 2K, 5K, 10K … 5M, 10M+.
 4. HyperMixer (`POST /api/judge`) works out who posted the reel, looks up their followers
    with Claude and web search, and scores the guess.
-5. A notification shows the reply (plain text, `?format=text`), e.g. `Nailed it · @someone has 18K · +3 · 🔥4 · 27 pts`.
+5. A notification shows the reply (plain text, `?format=text`) on three short lines, e.g.
+   `🎯 Nailed it! +3` / `Real answer: 18K followers` / `Your score: 27 · 🔥 4 in a row`.
+   Shortcuts can't show a Dynamic Island; that needs a Live Activity in the HyperMixer app.
 
-Scoring: right range = 3 points, the next range = 1, anything else = 0.
+Scoring: the step closest to the real count = 3 points, the step next to it = 1, anything else = 0.
 Today's leaderboard: `GET /api/judge?board=1`.
 
 ## Server setup (Vercel)

@@ -10,10 +10,10 @@ iOS only imports signed shortcuts. Sign on a Mac:
 What the shortcut does, in order:
   1. Take Screenshot (the reel you're watching)
   2. Extract Text from Image (on the phone)
-  3. Choose from List: 1K / 10K / 100K / 1M / 10M+
+  3. Choose from List: a scrolling list, 1K, 2K, 5K … 5M, 10M+
   4. Get Device Details: device name (your name on the leaderboard)
   5. POST {text, guess, player} to <API base>/api/judge?format=text
-  6. Show Notification with the reply (one plain sentence)
+  6. Show Notification with the reply (three short lines)
 """
 import plistlib
 import sys
@@ -60,7 +60,7 @@ actions = [
     action("is.workflow.actions.comment", {"WFCommentActionText": "HyperJudge by HyperMixer. Guess the creator's followers while you watch a reel. Run it from AssistiveTouch (Settings > Accessibility > Touch > AssistiveTouch > Single-Tap > HyperJudge)."}),
     action("is.workflow.actions.takescreenshot", {}, shot),
     action("is.workflow.actions.extracttextfromimage", {"WFImage": attachment(shot, "Screenshot")}, ocr),
-    action("is.workflow.actions.list", {"WFItems": ["1K", "10K", "100K", "1M", "10M+"]}, ranges),
+    action("is.workflow.actions.list", {"WFItems": ["1K", "2K", "5K", "10K", "20K", "50K", "100K", "200K", "500K", "1M", "2M", "5M", "10M+"]}, ranges),
     action(
         "is.workflow.actions.choosefromlist",
         {"WFInput": attachment(ranges, "List"), "WFChooseFromListActionPrompt": "How many followers?"},
