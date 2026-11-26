@@ -157,7 +157,9 @@ export function handleFromText(text: string): string | null {
     if (same && asHandle(same[1])) return asHandle(same[1]);
     if (!/^(?:Follow|Following)$/i.test(lines[i])) continue;
     for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-      const h = asHandle(lines[j]);
+      // Collab reels show "creator and partner" (or "and 2 others"): the first name posted it.
+      const collab = lines[j].match(/^@?([A-Za-z0-9._]{2,30})\s+and\s+\S+/i);
+      const h = asHandle(collab ? collab[1] : lines[j]);
       if (h) return h;
     }
     for (let j = i + 1; j <= Math.min(lines.length - 1, i + 2); j++) {
