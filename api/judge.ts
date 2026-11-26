@@ -139,6 +139,35 @@ function parseJson(text: string): Record<string, unknown> | null {
   }
 }
 
+const NOT_HANDLES = new Set(["follow", "following", "reels", "reel", "sponsored", "original", "audio", "liked", "share", "more", "verified"]);
+const asHandle = (line: string) => {
+  const m = line.trim().replace(/\s*[✓✔☑]\s*$/u, "").match(/^@?([A-Za-z0-9._]{2,30})$/);
+  return m && !NOT_HANDLES.has(m[1].toLowerCase()) && /[a-z]/i.test(m[1]) ? m[1].toLowerCase() : null;
+};
+
+/**
+ * The reel's creator from the screenshot text, without guessing: Instagram puts the
+ * username right before its "Follow" button (sometimes with a label like "AI content"
+ * or "Sponsored" in between). Returns null when the layout doesn't show that.
+ */
+export function handleFromText(text: string): string | null {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const same = lines[i].match(/^@?([A-Za-z0-9._]{2,30})\s*[•·]?\s*(?:Follow|Following)$/i);
+    if (same && asHandle(same[1])) return asHandle(same[1]);
+    if (!/^(?:Follow|Following)$/i.test(lines[i])) continue;
+    for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+      const h = asHandle(lines[j]);
+      if (h) return h;
+    }
+    for (let j = i + 1; j <= Math.min(lines.length - 1, i + 2); j++) {
+      const h = asHandle(lines[j]);
+      if (h) return h;
+    }
+  }
+  return null;
+}
+
 async function lookUp(text: string, handle: string | null): Promise<Found | { error: string }> {
   if (handle) {
     const cached = (await kv([["GET", `hj:f2:${handle}`]]))[0];
@@ -243,7 +272,7 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
   const text = typeof body.text === "string" ? body.text : "";
   if (!handle && text.trim().length < 2) return { line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" };
 
-  const found = await lookUp(text, handle);
+  const found = await lookUp(text, handle ?? handleFromText(text));
   if ("error" in found) return { line: found.error, error: "lookup" };
   if (!found.handle) return { line: "Couldn't spot the creator on this screen. Try when their name is showing.", error: "no_handle" };
   if (found.followers === null) return { line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" };
