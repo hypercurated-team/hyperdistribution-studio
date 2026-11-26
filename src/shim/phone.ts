@@ -43,6 +43,8 @@ const toItem = (w: Wire): FolderItem => {
 };
 
 function onApp(m: Record<string, unknown>) {
+  // Other features (cloud sign-in results) listen for the shell's messages too.
+  window.dispatchEvent(new CustomEvent("hm:app", { detail: m }));
   switch (m.type) {
     case "media-perm":
       state.access = m.access as Access;

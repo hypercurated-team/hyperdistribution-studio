@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { folder } from "../../shim/folder";
 import { phone } from "../../shim/phone";
+import { clouds } from "../../shim/clouds";
 import { GROUPS, insights } from "../../shim/insights";
 import { settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
@@ -68,7 +69,11 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
   const shown = ordered.slice(0, limit);
   const shownKey = shown.map((m) => m.id).join(",");
   // Inside the app, ask the phone for previews of what's on screen.
-  useEffect(() => { if (phone.available) phone.previews(shown.map((m) => m.id)); }, [shownKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const ids = shown.map((m) => m.id);
+    if (phone.available) phone.previews(ids);
+    clouds.previews(ids.filter(clouds.isCloudItem));
+  }, [shownKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const renders = useCollection<Render>("renders").filter((r) => r.postId === post.id).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   const last = renders[0];
   const video = isVideo(post.format);
@@ -107,7 +112,8 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
       };
       const top = media.filter((m) => !junk(m.id)).map((m) => [score(m), m] as const).sort((a, b) => b[0] - a[0]).slice(0, 24).map(([, m]) => m);
       if (phone.available) await phone.previewsReady(top.map((m) => m.id));
-      const order = await pickClips({ title, notes, format: post.format }, top.map((m) => ({ ...m, thumbUrl: phone.item(m.id)?.thumbUrl ?? m.thumbUrl })), length);
+      await clouds.previews(top.map((m) => m.id).filter(clouds.isCloudItem));
+      const order = await pickClips({ title, notes, format: post.format }, top.map((m) => ({ ...m, thumbUrl: phone.item(m.id)?.thumbUrl ?? clouds.item(m.id)?.thumbUrl ?? m.thumbUrl })), length);
       if (order.length) { setClips(order); toast(`Claude picked ${order.length} clip${order.length > 1 ? "s" : ""}`); }
       else toast("Claude didn't find clips that fit. Pick them yourself.");
     } catch (e) { toast(errText(e)); }
@@ -124,6 +130,8 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
     try {
       const fromPhone = clips.filter((id) => phone.isPhoneItem(id));
       if (fromPhone.length) { toast(`Getting ${fromPhone.length} clip${fromPhone.length > 1 ? "s" : ""} from your phone…`); await phone.ensureFiles(fromPhone); }
+      const fromCloud = clips.filter((id) => clouds.isCloudItem(id));
+      if (fromCloud.length) { toast(`Downloading ${fromCloud.length} clip${fromCloud.length > 1 ? "s" : ""} from your drives…`); await clouds.ensureFiles(fromCloud); }
       await col("renders").doc().set({
         postId: post.id, brandId: post.brandId, brand: brand?.name ?? "", handle: brand?.channels?.find((c) => c.id === post.channelId)?.handle ?? "",
         title, script: notes, format: post.format ?? "", style, lengthSec: length, aspect: post.platform === "linkedin" ? "4:5" : "9:16", music: "",

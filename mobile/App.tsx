@@ -77,6 +77,22 @@ function Shell() {
     web.current?.injectJavaScript(`window.__hmFromApp && window.__hmFromApp(${JSON.stringify(m)}); true;`);
   }, []);
 
+  // Cloud sign-in (Google Drive, OneDrive, Dropbox) happens in the system browser, which
+  // returns to hypermixer://oauth?r=…; hand that result to the page once it has loaded.
+  const loaded = useRef(false);
+  const pendingAuth = useRef<string | null>(null);
+  useEffect(() => {
+    const take = (url: string | null | undefined) => {
+      const r = url && /^hypermixer:\/\/oauth\b/.test(url) ? /[?&]r=([^&#]+)/.exec(url)?.[1] : null;
+      if (!r) return;
+      if (loaded.current) send({ type: "oauth-result", r });
+      else pendingAuth.current = r;
+    };
+    Linking.getInitialURL().then(take).catch(() => {});
+    const sub = Linking.addEventListener("url", (e) => take(e.url));
+    return () => sub.remove();
+  }, [send]);
+
   const onMessage = useCallback(async (e: WebViewMessageEvent) => {
     let m: Msg;
     try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
@@ -130,7 +146,11 @@ function Shell() {
         originWhitelist={["https://*", "blob:*", "data:*"]}
         injectedJavaScriptBeforeContentLoaded={BOOT}
         onMessage={onMessage}
-        onLoadEnd={() => SplashScreen.hideAsync().catch(() => {})}
+        onLoadEnd={() => {
+          SplashScreen.hideAsync().catch(() => {});
+          loaded.current = true;
+          if (pendingAuth.current) { const r = pendingAuth.current; pendingAuth.current = null; setTimeout(() => send({ type: "oauth-result", r }), 1500); }
+        }}
         onError={() => { SplashScreen.hideAsync().catch(() => {}); setFailed(true); }}
         onShouldStartLoadWithRequest={(req: WebViewNavigation & { isTopFrame?: boolean }) => {
           const url = req.url;

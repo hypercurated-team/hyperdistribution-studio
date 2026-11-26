@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { folder } from "../../shim/folder";
 import { phone } from "../../shim/phone";
+import { clouds, CLOUDS, type CloudId } from "../../shim/clouds";
+import CloudFolders from "./CloudFolders";
 import { db, docsOf } from "../../shim/db";
 import { saveFile } from "../../shim/native";
 import { isMobile } from "../../shim/platform";
-import { claudeStatus, conn, settingsStore } from "../../shim/services";
+import { claudeStatus, settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
 import { errText, Icon, Sheet, toast } from "../ui";
 import { PLATFORMS } from "../platforms";
@@ -25,6 +27,12 @@ function useFolder() {
 const COLS = ["brands", "posts", "renders"];
 
 export default function Connect({ brands }: ScreenProps) {
+  const [folders, setFolders] = useState<CloudId | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => { const p = (e as CustomEvent).detail as CloudId; toast(`${CLOUDS.find((c) => c.id === p)?.name} connected. Choose folders.`); setFolders(p); };
+    addEventListener("hm:cloud-connected", on);
+    return () => removeEventListener("hm:cloud-connected", on);
+  }, []);
   const [sheet, setSheet] = useState<"" | "claude" | "license" | "heygen">("");
   const [, refresh] = useState(0);
   const f = useFolder();
@@ -35,16 +43,7 @@ export default function Connect({ brands }: ScreenProps) {
   const ps = phone.state;
   const media = f.items.length + ps.items.length + ps.files.length;
   const heygen = !!settingsStore.heygen();
-  const c = conn.get();
   const done = [claude, media > 0, !!license].filter(Boolean).length;
-  const toggleDrive = async () => {
-    if (!c.driveAvailable) return toast("Google Drive is coming soon");
-    try {
-      if (c.driveConnected) { await conn.disconnectDrive(); toast("Google Drive disconnected"); }
-      else { await conn.connectDrive(); toast("Google Drive connected"); }
-    } catch (e) { toast(errText(e)); }
-    refresh((n) => n + 1);
-  };
 
   const pickFolder = async () => {
     try { await folder.connect(); } catch (e) { if ((e as Error).name !== "AbortError") toast("Couldn't open that folder"); }
@@ -72,7 +71,6 @@ export default function Connect({ brands }: ScreenProps) {
   ];
   const extras = [
     { key: "heygen", g: "Hg", c: "#7B3FE4", label: "HeyGen", sub: heygen ? "Avatar videos with your HeyGen key" : "Optional: avatar videos read to camera", on: heygen, act: () => setSheet("heygen") },
-    { key: "drive", g: "Dr", c: "#1A73E8", label: "Google Drive", sub: !c.driveAvailable ? "Coming soon" : c.driveConnected ? "Signed in. Drive sync runs from the classic board for now" : "Optional: sync with your Google Drive", on: c.driveConnected, act: toggleDrive },
   ];
 
   return (
@@ -103,11 +101,10 @@ export default function Connect({ brands }: ScreenProps) {
         </div>
       </section>
 
-      {phone.available && (
-        <section className="stack" aria-labelledby="c-src">
+      <section className="stack" aria-labelledby="c-src">
           <div className="eyebrow" id="c-src">Media sources</div>
           <div className="card list">
-            <div className="item">
+            {phone.available && <div className="item">
               <span className="mono" style={{ background: "#E8367A", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">Ph</span>
               <div className="grow stack" style={{ gap: 0 }}>
                 <strong>Phone photos</strong>
@@ -128,18 +125,42 @@ export default function Connect({ brands }: ScreenProps) {
                 ? <button type="button" className="btn pill" onClick={() => phone.changeSelection()}>Change</button>
                 : ps.access === "all" ? <button type="button" className="btn pill" disabled={ps.scanning} onClick={() => phone.scan()} style={{ color: "var(--ok)" }}><Icon name="check" size={16} stroke={2.6} />On</button>
                 : <button type="button" className="btn pill primary" disabled={ps.scanning} onClick={() => phone.scan()}>Scan</button>}
-            </div>
-            <div className="item">
-              <span className="mono" style={{ background: "#0A66C2", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">Fi</span>
-              <div className="grow stack" style={{ gap: 0 }}>
-                <strong>Files and cloud</strong>
-                <span className="small muted">{ps.files.length ? `${ps.files.length} added · ` : ""}OneDrive, Google Drive, Dropbox, iCloud Drive</span>
-              </div>
-              <button type="button" className={`btn pill ${ps.files.length ? "" : "primary"}`} onClick={() => phone.pickFiles()}>Add</button>
-            </div>
+            </div>}
+            {CLOUDS.map((cl) => {
+              const st = clouds.state[cl.id];
+              const on = clouds.connected(cl.id);
+              const sub = !st.configured ? "Not set up on this site yet"
+                : !on ? "Sign in, then choose folders"
+                : st.error ? st.error
+                : st.indexing ? `${st.account} · reading folders…`
+                : st.folders.length ? `${st.account} · ${st.folders.length} folder${st.folders.length > 1 ? "s" : ""} · ${st.items.length.toLocaleString()} photos and videos`
+                : `${st.account} · choose folders`;
+              return (
+                <div className="item" key={cl.id}>
+                  <span className="mono" style={{ background: cl.c, width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">{cl.g}</span>
+                  <div className="grow stack" style={{ gap: 0, minWidth: 0 }}>
+                    <strong>{cl.name}</strong>
+                    <span className="small muted ellipsis">{sub}</span>
+                  </div>
+                  {on ? (
+                    <div className="row" style={{ gap: 6 }}>
+                      <button type="button" className="btn pill" onClick={() => setFolders(cl.id)}>Folders</button>
+                      <button type="button" className="btn pill icon" aria-label={`Disconnect ${cl.name}`} onClick={() => clouds.disconnect(cl.id).then(() => toast(`${cl.name} disconnected`))}><Icon name="x" size={16} /></button>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn pill primary" disabled={!st.configured} onClick={() => clouds.connect(cl.id).catch((e) => toast(errText(e)))}>Connect</button>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {phone.available && (
+            <button type="button" className="btn pill" style={{ alignSelf: "flex-start" }} onClick={() => phone.pickFiles()}>
+              {ps.files.length ? `Files on this phone · ${ps.files.length}` : "Add files on this phone"}
+            </button>
+          )}
         </section>
-      )}
+      {folders && <CloudFolders provider={folders} onClose={() => setFolders(null)} />}
 
       <section className="stack" aria-labelledby="c-more">
         <div className="eyebrow" id="c-more">Optional</div>
@@ -153,7 +174,7 @@ export default function Connect({ brands }: ScreenProps) {
               </div>
               {r.on
                 ? <button type="button" className="btn pill" onClick={r.act} aria-label={`Change ${r.label}`} style={{ color: "var(--ok)" }}><Icon name="check" size={16} stroke={2.6} />On</button>
-                : <button type="button" className="btn pill" onClick={r.act} disabled={r.key === "drive" && !c.driveAvailable}>{r.key === "drive" && !c.driveAvailable ? "Soon" : "Connect"}</button>}
+                : <button type="button" className="btn pill" onClick={r.act}>Connect</button>}
             </div>
           ))}
         </div>
