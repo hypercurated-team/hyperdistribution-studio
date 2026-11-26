@@ -224,6 +224,11 @@ export default function Connect({ brands }: ScreenProps) {
           onSave={(v) => { store(KEYS.heygen, v); refresh((n) => n + 1); setSheet(""); toast(v ? "HeyGen connected" : "HeyGen disconnected"); }}
           onClose={() => setSheet("")} />
       )}
+      {phone.available && ps.shell.version && (
+        <p className="small muted" style={{ textAlign: "center", margin: 0 }}>
+          App {ps.shell.version} · {ps.shell.update ? `update ${ps.shell.update.slice(0, 8)}` : "no updates yet"}
+        </p>
+      )}
       {sheet === "license" && (
         <KeySheet title="Video rendering" label="Remotion license" placeholder="free-license" initial={license || "free-license"}
           hint={<>Videos render on this device with <a href="https://www.remotion.dev" target="_blank" rel="noopener">Remotion</a>. Free for individuals and companies of up to 3 people: keep <code>free-license</code>. Larger companies need a <a href="https://www.remotion.dev/license" target="_blank" rel="noopener">company license</a> key.</>}
