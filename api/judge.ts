@@ -195,6 +195,30 @@ export async function businessDiscovery(handle: string): Promise<number | null> 
   return typeof n === "number" && n >= 0 ? n : null;
 }
 
+/**
+ * MVP count: the follower line in the public profile page's description
+ * ("12.3K Followers, 210 Following, 85 Posts"). Instagram may show a login page to
+ * servers instead, in which case this returns null and Claude's search takes over.
+ */
+export function countFromProfileHtml(html: string): number | null {
+  const tag = (html.match(/<meta[^>]*>/gi) ?? []).find((t) => /(?:property|name)="(?:og:description|description)"/i.test(t)) ?? "";
+  const desc = tag.match(/content="([^"]+)"/i)?.[1] ?? "";
+  const m = desc.replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, "")) * ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[(m[2] || "").toUpperCase()] || Number(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+}
+
+export async function publicCount(handle: string): Promise<number | null> {
+  const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
+    headers: { "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(6000),
+  }).catch(() => null);
+  if (!res?.ok) return null;
+  return countFromProfileHtml(await res.text().catch(() => ""));
+}
+
 const remember = async (found: Found) => {
   if (found.handle && found.followers !== null) await kv([["SET", `hj:f2:${found.handle}`, String(found.followers), "EX", String(DAY)]]);
   return found;
@@ -204,8 +228,8 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
   if (handle) {
     const cached = (await kv([["GET", `hj:f2:${handle}`]]))[0];
     if (cached) return { handle, followers: Number(cached) };
-    const official = await businessDiscovery(handle);
-    if (official !== null) return remember({ handle, followers: official });
+    const direct = (await businessDiscovery(handle)) ?? (await publicCount(handle));
+    if (direct !== null) return remember({ handle, followers: direct });
   }
   if (!(process.env.HDS_SHARED_KEY === "true" && process.env.ANTHROPIC_API_KEY)) return { error: "Claude isn't switched on for HyperMixer yet." };
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -236,7 +260,7 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
     const f = typeof raw === "number" ? Math.round(raw) : typeof raw === "string" ? (readGuess(raw)?.value ?? NaN) : NaN;
     const found: Found = { handle: h, followers: Number.isFinite(f) && f > 0 ? Math.round(f) : null };
     // Claude found the handle but no count: ask Instagram's API for the handle it found.
-    if (found.handle && found.followers === null && found.handle !== handle) found.followers = await businessDiscovery(found.handle);
+    if (found.handle && found.followers === null && found.handle !== handle) found.followers = (await businessDiscovery(found.handle)) ?? (await publicCount(found.handle));
     return remember(found);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) return { error: "HyperJudge is busy. Try again in a minute." };
