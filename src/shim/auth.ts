@@ -200,12 +200,15 @@ export const auth = {
   /** Apple, Google or Microsoft. In the app this continues in the phone's browser and comes back by itself. */
   async provider(p: Provider) {
     if (!isNative) { save(await popup(p)); return; } // preloaded by the sign-in screen
-    if (!state.shellCanOpen) throw fail("Close and reopen HyperMixer to finish updating, then try again.");
     const k = b64u(crypto.getRandomValues(new Uint8Array(32)));
     const n = b64u(crypto.getRandomValues(new Uint8Array(12)));
     write(HANDOFF, { k, n, t: Date.now() });
     // The key travels in the #fragment, which browsers never send to a server.
     postToApp({ type: "open-external", url: `${location.origin}/?signin=${p}#k=${k}&n=${n}` });
+    // Safari opening hides this page. If it doesn't within a few seconds, this copy of the app can't open it yet.
+    if (state.shellCanOpen) return;
+    await new Promise((r) => setTimeout(r, 2500));
+    if (document.visibilityState === "visible") throw fail("Close and reopen HyperMixer to finish updating, then try again.");
   },
   /** For the page that runs in the phone's browser. */
   popup,
