@@ -9,7 +9,7 @@ import * as WebBrowser from "expo-web-browser";
  * refresh token back to hyperjudge://auth. The session lives in the App Group so the
  * Dynamic Island round (Swift, HJShared.swift) can send the same account to /api/judge.
  */
-export const WEB = "https://hyperdistribution-studio.vercel.app";
+export const WEB = "https://hypermixer.vercel.app";
 export type Provider = "apple" | "google" | "microsoft";
 export type Account = { uid: string; email: string; name: string };
 

@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#F4F5FA",
     "extra": {
-      "webUrl": "https://hyperdistribution-studio.vercel.app",
+      "webUrl": "https://hypermixer.vercel.app",
       "eas": {
         "projectId": "a4465f86-2a54-455c-b3ea-e1bcedb51bfd"
       }

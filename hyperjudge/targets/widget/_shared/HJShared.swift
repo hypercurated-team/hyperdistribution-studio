@@ -7,7 +7,7 @@ import AppIntents
 import Foundation
 
 let hjGroup = "group.com.kraftxworks.hyperjudge"
-let hjAPI = URL(string: "https://hyperdistribution-studio.vercel.app/api/judge")!
+let hjAPI = URL(string: "https://hypermixer.vercel.app/api/judge")!
 /// Same 13 steps the server snaps guesses to (api/judge.ts STEPS).
 let hjSteps = ["1K", "2K", "5K", "10K", "20K", "50K", "100K", "200K", "500K", "1M", "2M", "5M", "10M+"]
 

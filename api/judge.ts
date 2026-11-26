@@ -215,7 +215,7 @@ export function countFromText(desc: string): number | null {
 
 export async function publicCount(handle: string): Promise<number | null> {
   const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
-    headers: { "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)" },
+    headers: { "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hypermixer.vercel.app)" },
     redirect: "follow",
     signal: AbortSignal.timeout(6000),
   }).catch(() => null);

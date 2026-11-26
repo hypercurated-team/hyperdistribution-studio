@@ -22,7 +22,7 @@ const WebView = RNWebView as unknown as React.ComponentType<Record<string, unkno
  * screen, opening other sites in the system browser, and the phone's own
  * photos and files (see media.ts).
  */
-const WEB_URL: string = Constants.expoConfig?.extra?.webUrl ?? "https://hyperdistribution-studio.vercel.app";
+const WEB_URL: string = Constants.expoConfig?.extra?.webUrl ?? "https://hypermixer.vercel.app";
 const ORIGIN = new URL(WEB_URL).origin;
 
 SplashScreen.preventAutoHideAsync().catch(() => {});

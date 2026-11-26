@@ -24,7 +24,7 @@ import plistlib
 import sys
 import uuid
 
-API = (sys.argv[1] if len(sys.argv) > 1 else "https://hyperdistribution-studio.vercel.app").rstrip("/")
+API = (sys.argv[1] if len(sys.argv) > 1 else "https://hypermixer.vercel.app").rstrip("/")
 
 
 def uid():
@@ -104,7 +104,7 @@ actions = [
             "WFHTTPHeaders": {
                 "Value": {
                     "WFDictionaryFieldValueItems": [
-                        {"WFItemType": 0, "WFKey": plain("User-Agent"), "WFValue": plain("Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)")},
+                        {"WFItemType": 0, "WFKey": plain("User-Agent"), "WFValue": plain("Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hypermixer.vercel.app)")},
                         {"WFItemType": 0, "WFKey": plain("Accept-Language"), "WFValue": plain("en-US,en;q=0.9")},
                     ]
                 },
