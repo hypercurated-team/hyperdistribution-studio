@@ -213,6 +213,13 @@ export const auth = {
   /** For the page that runs in the phone's browser. */
   popup,
   prepare,
+  /** Deletes the sign-in account itself. Call sync.wipeAccount() first. */
+  async deleteAccount() {
+    const id = await auth.idToken();
+    if (!id) throw fail("Sign in again, then delete your account.");
+    await rest("accounts:delete", { idToken: id });
+    save(null); write(SKIP, null); state.skipped = false; changed();
+  },
   signOut() { save(null); write(SKIP, null); state.skipped = false; changed(); },
   skip() { state.skipped = true; write(SKIP, true); changed(); },
 };

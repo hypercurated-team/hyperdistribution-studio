@@ -124,6 +124,17 @@ async function run() {
 
 export const sync = {
   state,
+  /** Removes everything this account has synced (for deleting the account). Data on this device stays. */
+  async wipeAccount() {
+    const s = auth.state.session;
+    if (!s || !auth.config()) return;
+    clearTimeout(timer);
+    uid = s.uid; pending.clear();
+    const deletes: { delete: string }[] = [];
+    for (const c of SYNCED) for (const id of (await listAll(c)).keys()) deletes.push({ delete: docName(c, id) });
+    for (let i = 0; i < deletes.length; i += 400) await call(`${base()}:commit`, { method: "POST", body: JSON.stringify({ writes: deletes.slice(i, i + 400) }) });
+    meta.clear(); await saveMeta();
+  },
   /** Syncs now (or joins the sync already running). */
   now() { running ??= run().finally(() => { running = null; }); return running; },
   setup() {

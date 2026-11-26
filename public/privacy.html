@@ -17,36 +17,39 @@ p,li{color:var(--ink)}.muted{color:var(--muted)}a{color:var(--accent)}
 <body>
 <main>
 <h1>Privacy Policy</h1>
-<p class="muted">HyperMixer · Last updated 20 November 2026</p>
+<p class="muted">HyperMixer and HyperJudge · Last updated 26 November 2026</p>
 
-<p>HyperMixer is a content planning and editing tool for businesses. It is built so that your business data stays on your own device. This policy explains what that means.</p>
+<p>This policy covers HyperMixer (web, iOS and Android) and HyperJudge (iOS), both made by the HyperMixer team at Bright Solutions. We collect as little as we can, we never sell data, and we never use it for ads.</p>
 
-<h2>What stays on your device</h2>
-<p>Your brands, brand brains, posts, ideas, plans, accounts list, rendered videos and settings are stored only in your browser or in the HyperMixer app on your device. Photos, clips and music you pick are read on your device and are never uploaded by HyperMixer. We do not have accounts, and we cannot see your workspace.</p>
+<h2>Your account (optional)</h2>
+<p>You can use both apps without an account. If you sign in, your Hypercurated account is handled by Google Firebase Authentication. We keep your email address, your name if the sign-in provider shares it (Apple, Google or Microsoft), and an account ID.</p>
 
-<h2>What leaves your device, and why</h2>
-<ul>
-<li><strong>AI requests.</strong> When you use an AI feature, the text of that request (and any images you attach to it) is sent through HyperMixer's server to Anthropic, together with the Claude API key you entered. The server passes it on and returns the answer. It does not store your request, the answer or your key. Anthropic processes the request under its own terms and privacy policy, tied to your API key.</li>
-<li><strong>Reading links.</strong> When you ask HyperMixer to learn from a web page, our server fetches that public page and returns its text to you. We do not keep a copy.</li>
-<li><strong>HeyGen (optional).</strong> If you add your HeyGen API key and ask for an avatar video, the script, the avatar you picked and your key are sent through HyperMixer's server to HeyGen, which makes the video under its own terms. The server does not store them.</li>
-<li><strong>Google Drive (optional).</strong> If you connect Google Drive, your browser or app saves copies of your brand brains, brand kits, posts and videos straight into a HyperMixer folder in your own Drive. HyperMixer asks only for access to files it creates, and the sign-in stays on your device.</li>
-<li><strong>Hosting logs.</strong> Our hosting provider (Vercel) keeps standard technical logs, such as IP address and time of request, for security and reliability, for a limited period.</li>
-</ul>
+<h2>HyperMixer</h2>
+<p><strong>Your studio.</strong> Brands, brand brains, posts, plans and settings are stored on your device. If you sign in, they are also synced to your own private space in Google Firebase so you can use them on other devices. Only your account can read or write that space.</p>
+<p><strong>Photos and videos.</strong> The app reads only the photos and videos you allow. It understands them on your device (for example, finding faces, blurry shots and duplicates) and does not upload your library. When you use Auto-pick or attach an image to an AI request, small previews of the chosen images are sent with that request to Anthropic (see AI requests). Videos you make are saved on your device.</p>
+<p><strong>AI requests.</strong> When you use an AI feature, the text of that request, and any image previews attached to it, go through our server to Anthropic, which returns the answer. We do not store the request or the answer. We keep a daily count of AI requests per account or device to enforce the free allowance. If you enter your own Claude API key, it is sent with your requests and never stored on our server.</p>
+<p><strong>Reading links.</strong> When you ask HyperMixer to learn from a web page, our server fetches that public page and returns its text. We do not keep a copy.</p>
+<p><strong>Cloud files (optional).</strong> If you connect Google Drive, OneDrive or Dropbox, the sign-in token is encrypted and kept on your device. Our server uses it only to get a short-lived access token. Files are downloaded by your device straight from the provider, never through our server.</p>
+<p><strong>HeyGen (optional).</strong> If you add a HeyGen key and ask for an avatar video, the script, avatar and key go through our server to HeyGen. We do not store them.</p>
+
+<h2>HyperJudge</h2>
+<p><strong>A round.</strong> When you start a round, the HyperJudge shortcut reads the text on your screen on your iPhone. It sends that text (not the screenshot), your guess and your leaderboard code to our server. The server works out which public creator is showing and looks up their public follower count, then returns your score.</p>
+<p><strong>What we keep.</strong> Your leaderboard name, your leaderboard code, your points and your current streak. Public follower counts are cached for one day. If you play without an account, your points are kept under the name the shortcut sends.</p>
 
 <h2>What we don't do</h2>
-<p>We do not sell data, show ads, use tracking or analytics SDKs, or build profiles. The apps do not collect data for the developer.</p>
+<p>We do not sell data, show ads, use tracking or analytics SDKs, or build profiles. Neither app tracks you across other companies' apps or websites.</p>
 
-<h2>Camera, microphone and photos</h2>
-<p>The iOS and Android apps ask for access only when you choose to pick or shoot media, or save a finished video. That media stays on your device unless you share it yourself.</p>
+<h2>Service providers</h2>
+<p>Vercel hosts our server and keeps standard technical logs (such as IP address and time of request) for security for a limited period. Google Firebase handles sign-in and HyperMixer sync. Upstash stores HyperJudge scores. Anthropic answers AI requests.</p>
 
 <h2>Deleting your data</h2>
-<p>Because your data lives on your device, you control it. Delete the app, or clear the site's data in your browser, to remove everything. Export a backup in Settings first if you want to keep a copy.</p>
+<p>In HyperMixer, open Connect and tap <em>Delete account</em>. This deletes your account and everything synced to it. In HyperJudge, tap your name, then <em>Delete account</em>. This deletes your account, leaderboard name, code and scores. Deleting the app removes what is stored on your device. You can also ask us to delete your data through <a href="/support">support</a>.</p>
 
 <h2>Children</h2>
-<p>HyperMixer is a business tool and is not directed at children under 13.</p>
+<p>Neither app is directed at children under 13.</p>
 
 <h2>Changes and contact</h2>
-<p>If this policy changes, we will update this page and the date above. Questions: <a href="/support">HyperMixer support</a>.</p>
+<p>If this policy changes, we will update this page and the date above. Questions: <a href="/support">support</a>.</p>
 </main>
 </body>
 </html>

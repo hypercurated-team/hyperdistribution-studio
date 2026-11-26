@@ -1,20 +1,9 @@
-<!-- HyperMixer mark: three mixer faders, full-bleed square (platforms round the corners). -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4F5BFF"/>
-      <stop offset="1" stop-color="#2A33C9"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <g stroke="#FFFFFF" stroke-opacity=".38" stroke-width="44" stroke-linecap="round">
-    <line x1="332" y1="272" x2="332" y2="752"/>
-    <line x1="512" y1="272" x2="512" y2="752"/>
-    <line x1="692" y1="272" x2="692" y2="752"/>
-  </g>
-  <g fill="#FFFFFF">
-    <rect x="262" y="540" width="140" height="92" rx="46"/>
-    <rect x="602" y="452" width="140" height="92" rx="46"/>
-  </g>
-  <rect x="442" y="352" width="140" height="92" rx="46" fill="#FF5C9A"/>
+<!-- HyperMixer mark: an H whose crossbar is a fader knob. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5B63FF"/><stop offset="1" stop-color="#2A2FC4"/></linearGradient>
+<linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7AA8"/><stop offset="1" stop-color="#FF4D88"/></linearGradient></defs>
+<rect width="1024" height="1024" rx="228" fill="url(#g)"/>
+<rect x="292" y="252" width="128" height="520" rx="64" fill="#fff"/>
+<rect x="604" y="252" width="128" height="520" rx="64" fill="#fff"/>
+<rect x="232" y="452" width="560" height="120" rx="60" fill="url(#p)"/>
 </svg>
