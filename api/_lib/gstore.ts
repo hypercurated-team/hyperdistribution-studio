@@ -10,7 +10,7 @@
  * GCP_WORKLOAD_IDENTITY_POOL_ID, GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID.
  *
  * It understands the commands HyperJudge uses: GET, SET [EX s], ZINCRBY,
- * ZREVRANGE … WITHSCORES, ZREVRANK, ZSCORE, HSET, HMGET (EXPIRE is ignored;
+ * ZREVRANGE … WITHSCORES, ZREVRANK, ZSCORE, HSET, HMGET, DEL, HDEL, ZREM (EXPIRE is ignored;
  * daily boards are keyed by date). Data sits under hyperjudge_* collections.
  */
 const env = (k: string) => process.env[k] || "";
@@ -170,6 +170,10 @@ export async function gstore(cmd: string[][]): Promise<unknown[]> {
         case "ZREVRANGE": return ztop(key, Number(args[1]) - Number(args[0]) + 1);
         case "HSET": return hset(key, args[0], args[1]);
         case "HMGET": return Promise.all(args.map((f) => hget(key, f)));
+        // For account deletion.
+        case "DEL": return Promise.all([key, ...args].map((k) => call(strDoc(k), { method: "DELETE" }))).then((r) => r.length);
+        case "HDEL": return Promise.all(args.map((f) => call(`${hCol(key)}/${id(f)}`, { method: "DELETE" }))).then((r) => r.length);
+        case "ZREM": return Promise.all(args.map((m) => call(`${zCol(key)}/${id(m)}`, { method: "DELETE" }))).then((r) => r.length);
         default: return null;
       }
     }),

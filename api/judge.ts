@@ -81,6 +81,13 @@ async function kv(cmd: string[][]): Promise<unknown[]> {
       if (!(args[0] in board)) return null;
       return op === "ZSCORE" ? String(board[args[0]]) : Object.entries(board).sort((a, b) => b[1] - a[1]).findIndex(([m]) => m === args[0]);
     }
+    if (op === "DEL") { for (const k of [key, ...args]) mem.delete(k); return 1; }
+    if (op === "ZREM" || op === "HDEL") {
+      const o = JSON.parse(live || "{}") as Record<string, unknown>;
+      for (const m of args) delete o[m];
+      if (hit) mem.set(key, { v: JSON.stringify(o), exp: hit.exp });
+      return 1;
+    }
     if (op === "HSET" || op === "HMGET") {
       const h = JSON.parse(live || "{}") as Record<string, string>;
       if (op === "HMGET") return args.map((f) => h[f] ?? null);
