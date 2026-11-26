@@ -8,6 +8,8 @@ import Swipe from "./screens/Swipe";
 import Edit from "./screens/Edit";
 import Publish from "./screens/Publish";
 import Dashboard from "./screens/Dashboard";
+import SignIn from "./screens/SignIn";
+import { auth } from "../shim/auth";
 
 export type Route = "connect" | "brands" | "swipe" | "edit" | "publish" | "dashboard";
 const ROUTES: Route[] = ["connect", "brands", "swipe", "edit", "publish", "dashboard"];
@@ -32,6 +34,15 @@ export default function App() {
     addEventListener("hm:claude", on);
     return () => removeEventListener("hm:claude", on);
   }, []);
+  const [, authTick] = useState(0);
+  const [askSignIn, setAskSignIn] = useState(false);
+  useEffect(() => {
+    const on = () => authTick((n) => n + 1);
+    const need = () => setAskSignIn(true);
+    addEventListener("hm:auth", on);
+    addEventListener("hm:need-signin", need);
+    return () => { removeEventListener("hm:auth", on); removeEventListener("hm:need-signin", need); };
+  }, []);
   const brands = useCollection<Brand>("brands");
   const posts = useCollection<Post>("posts");
   const live = brands.filter((b) => b.status !== "paused");
@@ -44,6 +55,12 @@ export default function App() {
     publish: posts.filter((p) => p.status === "scheduled").length,
   };
   const props = { brands: live, posts, arg: loc.arg };
+
+  // First run (or when the free AI needs an account): sign in, or "Not now".
+  const a = auth.state;
+  if (a.enabled && !a.session && (askSignIn || !a.skipped || a.required)) {
+    return <div className="app"><SignIn onDone={() => setAskSignIn(false)} /><Toaster /></div>;
+  }
 
   return (
     <div className="app">

@@ -14,12 +14,19 @@ import { claudeStatus } from "../shim/services";
 import { phone } from "../shim/phone";
 import { clouds } from "../shim/clouds";
 import App from "./App";
+import { auth } from "../shim/auth";
+import { SignInRelay } from "./screens/SignIn";
 import "./app.css";
 
 (async () => {
+  // Opened by the app in the phone's browser to sign in with Apple, Google or Microsoft: just that page.
+  if (new URLSearchParams(location.search).has("signin")) {
+    createRoot(document.getElementById("root")!).render(<StrictMode><SignInRelay /></StrictMode>);
+    return;
+  }
   setupNative();
   // Learn whether Claude is built in before the first screen, but never wait long for it.
-  await Promise.race([claudeStatus.refresh(), new Promise((r) => setTimeout(r, 1500))]);
+  await Promise.race([Promise.all([claudeStatus.refresh(), auth.setup()]), new Promise((r) => setTimeout(r, 1500))]);
   await registerWorker();
   createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
   startRenderer();

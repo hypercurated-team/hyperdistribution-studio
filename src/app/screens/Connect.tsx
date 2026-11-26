@@ -6,6 +6,7 @@ import CloudFolders from "./CloudFolders";
 import { db, docsOf } from "../../shim/db";
 import { saveFile } from "../../shim/native";
 import { isMobile } from "../../shim/platform";
+import { auth } from "../../shim/auth";
 import { claudeStatus, settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
 import { errText, Icon, Sheet, toast } from "../ui";
@@ -73,6 +74,7 @@ export default function Connect({ brands }: ScreenProps) {
     { key: "heygen", g: "Hg", c: "#7B3FE4", label: "HeyGen", sub: heygen ? "Avatar videos with your HeyGen key" : "Optional: avatar videos read to camera", on: heygen, act: () => setSheet("heygen") },
   ];
 
+  const acct = auth.state.session;
   return (
     <main className="screen">
       <header className="head">
@@ -82,6 +84,26 @@ export default function Connect({ brands }: ScreenProps) {
           <p>Plug in what makes posts, and where they go.</p>
         </div>
       </header>
+
+      {auth.state.enabled && (
+        <section className="stack" aria-labelledby="c-acct">
+          <div className="eyebrow" id="c-acct">Account</div>
+          <div className="card list">
+            <div className="item">
+              <span className="mono" style={{ background: "#3846F0", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">
+                {(acct?.name || acct?.email || "?").slice(0, 1).toUpperCase()}
+              </span>
+              <div className="grow stack" style={{ gap: 0, minWidth: 0 }}>
+                <strong className="ellipsis">{acct ? acct.name || acct.email || "Signed in" : "Not signed in"}</strong>
+                <span className="small muted ellipsis">{acct ? (acct.name && acct.email ? acct.email : "Your free AI actions follow you to any device") : "Sign in to keep your free AI actions on any device"}</span>
+              </div>
+              {acct
+                ? <button type="button" className="btn pill" onClick={() => { auth.signOut(); toast("Signed out"); }}>Sign out</button>
+                : <button type="button" className="btn pill primary" onClick={() => dispatchEvent(new Event("hm:need-signin"))}>Sign in</button>}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="stack" aria-labelledby="c-make">
         <div className="eyebrow" id="c-make">Make</div>

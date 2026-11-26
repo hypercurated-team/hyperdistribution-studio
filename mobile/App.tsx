@@ -28,6 +28,7 @@ const ORIGIN = new URL(WEB_URL).origin;
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 type Msg =
+  | { type: "open-external"; url: string }
   | { type: "save-start"; id: string; name: string; mime: string }
   | { type: "save-chunk"; id: string; data: string }
   | { type: "save-end"; id: string }
@@ -101,13 +102,18 @@ function Shell() {
   // Cloud sign-in (Google Drive, OneDrive, Dropbox) happens in the system browser, which
   // returns to hypermixer://oauth?r=…; hand that result to the page once it has loaded.
   const loaded = useRef(false);
-  const pendingAuth = useRef<string | null>(null);
+  const pendingAuth = useRef<Record<string, unknown> | null>(null);
   useEffect(() => {
     const take = (url: string | null | undefined) => {
-      const r = url && /^hypermixer:\/\/oauth\b/.test(url) ? /[?&]r=([^&#]+)/.exec(url)?.[1] : null;
-      if (!r) return;
-      if (loaded.current) send({ type: "oauth-result", r });
-      else pendingAuth.current = r;
+      if (!url) return;
+      const q = (k: string) => new RegExp(`[?&]${k}=([^&#]+)`).exec(url)?.[1];
+      // hypermixer://oauth?r=…  a drive connection;  hypermixer://auth?c=…&n=…  a HyperMixer sign-in.
+      const m = /^hypermixer:\/\/oauth\b/.test(url) && q("r") ? { type: "oauth-result", r: q("r") }
+        : /^hypermixer:\/\/auth\b/.test(url) && q("c") && q("n") ? { type: "auth-result", c: q("c"), n: q("n") }
+        : null;
+      if (!m) return;
+      if (loaded.current) send(m);
+      else pendingAuth.current = m;
     };
     Linking.getInitialURL().then(take).catch(() => {});
     const sub = Linking.addEventListener("url", (e) => take(e.url));
@@ -118,6 +124,8 @@ function Shell() {
     let m: Msg;
     try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
     if (m.type === "panel") { panelOpen.current = m.open; return; }
+    // A page of this site that must open in the phone's browser (sign-in with Apple, Google, Microsoft).
+    if (m.type === "open-external") { if (m.url.startsWith(ORIGIN + "/")) Linking.openURL(m.url).catch(() => {}); return; }
     if (m.type === "media-scan") { Media.scan(send).catch(() => send({ type: "media-perm", access: "error" })); return; }
     if (m.type === "media-change") { Media.changeSelection().then(() => Media.scan(send)).catch(() => {}); return; }
     if (m.type === "files-pick") { Media.pickFiles(send).catch(() => {}); return; }
@@ -174,8 +182,9 @@ function Shell() {
             type: "shell-info", version: Constants.expoConfig?.version ?? "", runtime: Updates.runtimeVersion ?? "",
             channel: Updates.channel ?? "", update: Updates.isEmbeddedLaunch ? "" : (Updates.updateId ?? ""),
             updatedAt: Updates.createdAt ? Updates.createdAt.toISOString() : "",
+            caps: ["open-external"],
           });
-          if (pendingAuth.current) { const r = pendingAuth.current; pendingAuth.current = null; setTimeout(() => send({ type: "oauth-result", r }), 1500); }
+          if (pendingAuth.current) { const m = pendingAuth.current; pendingAuth.current = null; setTimeout(() => send(m), 1500); }
         }}
         onError={() => { SplashScreen.hideAsync().catch(() => {}); setFailed(true); }}
         onShouldStartLoadWithRequest={(req: WebViewNavigation & { isTopFrame?: boolean }) => {
