@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { personFrom } from "./_lib/firebase.js";
 
 /**
  * HyperJudge: guess a reel creator's follower count.
@@ -67,6 +68,18 @@ async function kv(cmd: string[][]): Promise<unknown[]> {
     if (op === "ZREVRANGE") {
       const board = JSON.parse(live || "{}") as Record<string, number>;
       return Object.entries(board).sort((a, b) => b[1] - a[1]).slice(0, Number(args[1]) + 1).flat().map(String);
+    }
+    if (op === "ZREVRANK" || op === "ZSCORE") {
+      const board = JSON.parse(live || "{}") as Record<string, number>;
+      if (!(args[0] in board)) return null;
+      return op === "ZSCORE" ? String(board[args[0]]) : Object.entries(board).sort((a, b) => b[1] - a[1]).findIndex(([m]) => m === args[0]);
+    }
+    if (op === "HSET" || op === "HMGET") {
+      const h = JSON.parse(live || "{}") as Record<string, string>;
+      if (op === "HMGET") return args.map((f) => h[f] ?? null);
+      h[args[0]] = args[1];
+      mem.set(key, { v: JSON.stringify(h), exp: Infinity });
+      return 1;
     }
     return null;
   });
@@ -171,14 +184,48 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
 const playerId = (raw: unknown) => String(raw ?? "").trim().replace(/[^\p{L}\p{N} ._'-]/gu, "").slice(0, 40) || "Player";
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Today's leaderboard. */
+/** Board member for a player: the account id when signed in, else "~name" (old shortcut, no account). */
+async function whoPlays(req: Request, raw: unknown): Promise<{ member: string; name: string; uid: string | null }> {
+  const typed = String(raw ?? "").trim() ? playerId(raw) : "";
+  const who = await personFrom(req).catch(() => null);
+  if (who && who !== "bad") {
+    const name = typed && typed !== "iPhone" ? typed : who.email.split("@")[0] || "Player";
+    return { member: who.uid, name, uid: who.uid };
+  }
+  const name = typed || "Player";
+  return { member: `~${name}`, name, uid: null };
+}
+
+/**
+ * GET /api/judge?board=1[&period=all]  the top 50 for today (default) or all time, with names.
+ * With a signed-in Bearer token it also returns your own rank as `me`.
+ */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   if (!url.searchParams.has("board")) return json({ ok: true, ranges: RANGES.map((r) => r.label) });
-  const flat = ((await kv([["ZREVRANGE", `hj:b:${today()}`, "0", "19", "WITHSCORES"]]))[0] as string[] | null) ?? [];
-  const board: { player: string; points: number }[] = [];
-  for (let i = 0; i + 1 < flat.length; i += 2) board.push({ player: flat[i], points: Number(flat[i + 1]) });
-  return json({ day: today(), board });
+  const all = url.searchParams.get("period") === "all";
+  const zkey = all ? "hj:b:all" : `hj:b:${today()}`;
+  const who = await personFrom(req).catch(() => null);
+  const uid = who && who !== "bad" ? who.uid : null;
+  const [flatRaw, myRank, myScore] = await kv([
+    ["ZREVRANGE", zkey, "0", "49", "WITHSCORES"],
+    ...(uid ? [["ZREVRANK", zkey, uid], ["ZSCORE", zkey, uid]] : []),
+  ]);
+  const flat = (flatRaw as string[] | null) ?? [];
+  const members: string[] = [];
+  const points: number[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) { members.push(flat[i]); points.push(Number(flat[i + 1])); }
+  const ids = members.filter((m) => !m.startsWith("~"));
+  const names = ids.length ? (((await kv([["HMGET", "hj:n", ...ids]]))[0] as (string | null)[] | null) ?? []) : [];
+  const nameOf = new Map(ids.map((m, i) => [m, names[i] || "Player"]));
+  const board = members.map((m, i) => ({
+    rank: i + 1,
+    name: m.startsWith("~") ? m.slice(1) : nameOf.get(m) ?? "Player",
+    points: points[i],
+    me: !!uid && m === uid,
+  }));
+  const me = uid && myRank !== null && myRank !== undefined ? { rank: Number(myRank) + 1, points: Number(myScore || 0) } : null;
+  return json({ period: all ? "all" : "today", day: today(), board, me });
 }
 
 /** One round: work out the creator, look up followers, score the guess. */
@@ -202,21 +249,23 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
   if (found.followers === null) return { line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" };
 
   const band = score(guess, found.followers);
-  const player = playerId(body.player);
-  const key = `hj:p:${player}`;
+  const player = await whoPlays(req, body.player);
+  const key = `hj:p:${player.member}`;
   const prev = JSON.parse(String((await kv([["GET", key]]))[0] || "{}")) as { total?: number; streak?: number };
   const streak = band.points > 0 ? (prev.streak || 0) + 1 : 0;
   const total = (prev.total || 0) + band.points;
   await kv([
     ["SET", key, JSON.stringify({ total, streak }), "EX", String(90 * DAY)],
-    ["ZINCRBY", `hj:b:${today()}`, String(band.points), player],
+    ["ZINCRBY", `hj:b:${today()}`, String(band.points), player.member],
     ["EXPIRE", `hj:b:${today()}`, String(3 * DAY)],
+    ["ZINCRBY", "hj:b:all", String(band.points), player.member],
+    ...(player.uid ? [["HSET", "hj:n", player.uid, player.name]] : []),
   ]);
 
   // Three short lines: the verdict, the real answer, your running score.
   const head = band.points === 3 ? "🎯 Nailed it! +3" : band.points === 1 ? "👍 Close! +1" : "❌ Miss";
   const line = `${head}\nReal answer: ${short(found.followers)} followers\nYour score: ${total}${streak > 1 ? ` · 🔥 ${streak} in a row` : ""}`;
-  return { line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak };
+  return { line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak, signedIn: !!player.uid };
 }
 
 /**

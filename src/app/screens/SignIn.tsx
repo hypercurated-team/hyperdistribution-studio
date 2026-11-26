@@ -98,6 +98,9 @@ export default function SignIn({ onDone }: { onDone?: () => void }) {
  */
 export function SignInRelay() {
   const p = new URLSearchParams(location.search).get("signin") as Provider;
+  // HyperJudge opens this page in a sign-in sheet that only hands the result back to itself.
+  const judge = new URLSearchParams(location.search).get("app") === "hyperjudge";
+  const appName = judge ? "HyperJudge" : "HyperMixer";
   const h = new URLSearchParams(location.hash.slice(1));
   const [k, n] = [h.get("k") || "", h.get("n") || ""];
   const [link, setLink] = useState("");
@@ -106,13 +109,15 @@ export function SignInRelay() {
   const [ready, setReady] = useState(false);
   useEffect(() => { auth.setup().then(() => auth.prepare()).then(() => setReady(true), (e) => setErr(errText(e))); }, []);
   const label = PROVIDERS.find((x) => x.id === p);
-  if (!label || !k || !n) return <main className="screen" style={{ justifyContent: "center", textAlign: "center" }}><p>Open HyperMixer and start sign-in from there.</p></main>;
+  if (!label || !k || !n) return <main className="screen" style={{ justifyContent: "center", textAlign: "center" }}><p>Open {appName} and start sign-in from there.</p></main>;
 
   const go = async () => {
     setErr(""); setBusy(true);
     try {
       const s = await auth.popup(p); // first thing in the tap, so Safari opens the window
-      const url = `hypermixer://auth?c=${await sealForApp(s, k)}&n=${n}`;
+      const url = judge
+        ? `hyperjudge://auth?r=${encodeURIComponent(s.refresh)}&n=${n}`
+        : `hypermixer://auth?c=${await sealForApp(s, k)}&n=${n}`;
       setLink(url);
       location.href = url;
     } catch (e) { setErr(errText(e)); }
@@ -122,7 +127,7 @@ export function SignInRelay() {
   return (
     <main className="screen" style={{ justifyContent: "center", maxWidth: 420, margin: "0 auto", width: "100%", textAlign: "center" }}>
       <span className="hc-mark" aria-hidden="true" style={{ width: 56, alignSelf: "center" }} />
-      <h1 style={{ margin: 0, fontSize: 28 }}>HyperMixer</h1>
+      <h1 style={{ margin: 0, fontSize: 28 }}>{appName}</h1>
       {!link ? (
         <>
           <p className="muted" style={{ margin: 0 }}>Sign in, then you'll go straight back to the app.</p>
@@ -133,7 +138,7 @@ export function SignInRelay() {
       ) : (
         <>
           <p style={{ margin: 0 }}>You're signed in.</p>
-          <a className="btn block primary" href={link} style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>Open HyperMixer</a>
+          <a className="btn block primary" href={link} style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>Open {appName}</a>
         </>
       )}
       {err && <p role="alert" className="small" style={{ color: "var(--bad)", margin: 0 }}>{err}</p>}

@@ -17,13 +17,30 @@ follower count in the Dynamic Island. Scores come from the HyperMixer server (`/
 4. After Lock in the island shows "Judging…", then the result in plain words, e.g.
    "👌 Close! +1 · @x has 2.1M · you said 10K · 12 pts · 🔥 2 in a row". It clears after 8 seconds.
 
+## Setup in the app (3 taps)
+
+1. **Add the HyperJudge shortcut**: shares `assets/HyperJudge.shortcut` (built by
+   `shortcuts/build_hyperjudge_app.py`, signed on a Mac with `shortcuts sign --mode anyone`).
+2. **Turn on AssistiveTouch**: opens Settings → Accessibility (`App-prefs:` link, falls back
+   to the app's own settings page). App Review sometimes questions `App-prefs:` links; if so,
+   drop them and keep the fallback.
+3. **Open Instagram**.
+
+## Accounts and leaderboard
+
+Same accounts as HyperMixer (the Hypercurated Firebase project). Email and password use
+Firebase's REST API; Apple, Google and Microsoft open HyperMixer's sign-in page
+(`/?signin=google&app=hyperjudge`) in a sign-in sheet that returns to `hyperjudge://auth`.
+The session sits in the App Group so island rounds are scored to the account.
+`GET /api/judge?board=1&period=today|all` serves the leaderboard (top 50, plus your rank).
+
 ## Where things are
 
 - `targets/widget/HyperJudgeWidget.swift`: the Live Activity (island + Lock Screen).
 - `targets/widget/_shared/HJShared.swift`: round logic, the Shortcuts action and the island
   buttons. Linked into both the app and the widget by `@bacons/apple-targets`.
 - `modules/hj-live`: lets the React Native screen lock in a wheel guess (calls `HJBridge`).
-- `App.tsx`: wheel, last result, leaderboard name, setup steps.
+- `App.tsx`: Play (setup, wheel, last result), Leaderboard, sign-in sheet. `auth.ts`, `setup.ts`.
 
 ## Build
 

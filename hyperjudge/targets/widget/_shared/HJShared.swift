@@ -32,12 +32,36 @@ enum HJStore {
   }
   static var player: String {
     let p = (defaults.string(forKey: "player") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    return p.isEmpty ? "iPhone" : p
+    return p.isEmpty ? (defaults.string(forKey: "name") ?? "") : p
   }
   static var guess: Int {
     get { min(max(Int(defaults.string(forKey: "guess") ?? "") ?? 3, 0), hjSteps.count - 1) }
     set { defaults.set(String(newValue), forKey: "guess") }
   }
+  /// A fresh Firebase ID token (HyperMixer account), refreshed with the token the app saved.
+  static func idToken() async -> String? {
+    guard let refresh = defaults.string(forKey: "refresh"), !refresh.isEmpty,
+          let key = defaults.string(forKey: "apiKey"), !key.isEmpty else { return nil }
+    if let t = defaults.string(forKey: "idToken"), let exp = Double(defaults.string(forKey: "idTokenExp") ?? ""),
+       exp - 60 > Date().timeIntervalSince1970 { return t }
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._~")
+    guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(key)"),
+          let enc = refresh.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+    req.httpBody = "grant_type=refresh_token&refresh_token=\(enc)".data(using: .utf8)
+    guard let (data, _) = try? await URLSession.shared.data(for: req),
+          let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let id = j["id_token"] as? String else { return nil }
+    let ttl = Double((j["expires_in"] as? String) ?? "3600") ?? 3600
+    defaults.set(id, forKey: "idToken")
+    defaults.set(String(Date().timeIntervalSince1970 + ttl), forKey: "idTokenExp")
+    if let r = j["refresh_token"] as? String { defaults.set(r, forKey: "refresh") }
+    return id
+  }
+
   static func saveResult(_ s: HJAttributes.ContentState) {
     let r = ["phase": s.phase, "title": s.title, "detail": s.detail, "score": s.score, "at": String(Date().timeIntervalSince1970)]
     if let data = try? JSONSerialization.data(withJSONObject: r), let json = String(data: data, encoding: .utf8) {
@@ -100,6 +124,7 @@ enum HJEngine {
     req.httpMethod = "POST"
     req.timeoutInterval = 25
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    if let token = await HJStore.idToken() { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
     req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": HJStore.text, "guess": guess, "player": HJStore.player])
     guard let (data, _) = try? await URLSession.shared.data(for: req),
           let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
