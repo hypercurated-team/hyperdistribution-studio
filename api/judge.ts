@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { personFrom } from "./_lib/firebase.js";
+import { gstore, gstoreReady, useOidcFrom } from "./_lib/gstore.js";
 
 /**
  * HyperJudge: guess a reel creator's follower count.
@@ -23,8 +24,9 @@ import { personFrom } from "./_lib/firebase.js";
  * GET /api/judge?board=1 → today's top players.
  *
  * Uses HyperMixer's built-in Claude key (ANTHROPIC_API_KEY + HDS_SHARED_KEY=true).
- * Scores and the cache use Vercel KV / Upstash when KV_REST_API_URL and
- * KV_REST_API_TOKEN are set, otherwise memory (lost when the server sleeps).
+ * Scores and the cache live in the Hypercurated Firestore (see _lib/gstore.ts),
+ * else Vercel KV / Upstash when KV_REST_API_URL and KV_REST_API_TOKEN are set,
+ * else memory (lost when the server sleeps).
  */
 export const config = { maxDuration: 60 };
 
@@ -39,6 +41,11 @@ const json = (body: unknown, status = 200) =>
 /* ---------- tiny key-value store ---------- */
 const mem = new Map<string, { v: string; exp: number }>();
 async function kv(cmd: string[][]): Promise<unknown[]> {
+  // Hypercurated's Firestore (no keys, via Vercel OIDC) when it's set up.
+  if (gstoreReady()) {
+    const out = await gstore(cmd).catch((e) => (console.error("gstore", e), null));
+    if (out) return out;
+  }
   if (KV_URL && KV_TOKEN) {
     const res = await fetch(`${KV_URL}/pipeline`, {
       method: "POST",
@@ -330,6 +337,7 @@ async function myCode(req: Request) {
  * With a signed-in Bearer token it also returns your own rank as `me`.
  */
 export async function GET(req: Request) {
+  useOidcFrom(req);
   const url = new URL(req.url);
   if (url.searchParams.has("code")) return myCode(req);
   if (!url.searchParams.has("board")) return json({ ok: true, ranges: RANGES.map((r) => r.label) });
@@ -425,6 +433,7 @@ export async function DELETE(req: Request) {
  * so anything that goes wrong still reads as a sentence on the phone.
  */
 export async function POST(req: Request) {
+  useOidcFrom(req);
   // Step one for the shortcut: just name the creator, quickly, so the phone can open their profile.
   if (new URL(req.url).searchParams.has("who")) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
