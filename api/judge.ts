@@ -202,8 +202,12 @@ export async function businessDiscovery(handle: string): Promise<number | null> 
  */
 export function countFromProfileHtml(html: string): number | null {
   const tag = (html.match(/<meta[^>]*>/gi) ?? []).find((t) => /(?:property|name)="(?:og:description|description)"/i.test(t)) ?? "";
-  const desc = tag.match(/content="([^"]+)"/i)?.[1] ?? "";
-  const m = desc.replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
+  return countFromText(tag.match(/content="([^"]+)"/i)?.[1] ?? "");
+}
+
+/** "1,570 Followers", "12.3K Followers" (also inside a longer page description) → a number. */
+export function countFromText(desc: string): number | null {
+  const m = String(desc ?? "").replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
   if (!m) return null;
   const n = Number(m[1].replace(/,/g, "")) * ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[(m[2] || "").toUpperCase()] || Number(m[1].replace(/,/g, ""));
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
@@ -273,15 +277,52 @@ const playerId = (raw: unknown) => String(raw ?? "").trim().replace(/[^\p{L}\p{N
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Board member for a player: the account id when signed in, else "~name" (old shortcut, no account). */
-async function whoPlays(req: Request, raw: unknown): Promise<{ member: string; name: string; uid: string | null }> {
+async function whoPlays(req: Request, raw: unknown, code?: unknown): Promise<{ member: string; name: string; uid: string | null }> {
   const typed = String(raw ?? "").trim() ? playerId(raw) : "";
   const who = await personFrom(req).catch(() => null);
   if (who && who !== "bad") {
     const name = typed && typed !== "iPhone" ? typed : who.email.split("@")[0] || "Player";
     return { member: who.uid, name, uid: who.uid };
   }
+  // The shortcut can't sign in, so it carries the player's leaderboard code instead.
+  const c = cleanCode(code);
+  if (c) {
+    const uid = (await kv([["GET", `hj:code:${c}`]]))[0] as string | null;
+    if (uid) {
+      const name = (((await kv([["HMGET", "hj:n", uid]]))[0] as (string | null)[] | null) ?? [])[0] || "Player";
+      return { member: uid, name, uid };
+    }
+  }
   const name = typed || "Player";
   return { member: `~${name}`, name, uid: null };
+}
+
+/** "hj-7k2m9q", " HJ7K2M9Q " → "HJ-7K2M9Q", anything else → null. */
+export function cleanCode(raw: unknown): string | null {
+  const s = String(raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^HJ/, "");
+  return s.length === 6 ? `HJ-${s}` : null;
+}
+
+const CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+function newCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return "HJ-" + Array.from(bytes, (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
+}
+
+/**
+ * GET /api/judge?code=1 (signed in): your personal leaderboard code, made once and kept.
+ * The shortcut sends it with each round so its points land on your name.
+ */
+async function myCode(req: Request) {
+  const who = await personFrom(req).catch(() => null);
+  if (!who || who === "bad") return json({ error: "Sign in to get your code." }, 401);
+  const [have, nameRaw] = await kv([["GET", `hj:ucode:${who.uid}`], ["HMGET", "hj:n", who.uid]]);
+  const name = ((nameRaw as (string | null)[] | null) ?? [])[0];
+  if (!name) await kv([["HSET", "hj:n", who.uid, who.email.split("@")[0] || "Player"]]);
+  if (typeof have === "string" && have) return json({ code: have });
+  const code = newCode();
+  await kv([["SET", `hj:code:${code}`, who.uid], ["SET", `hj:ucode:${who.uid}`, code]]);
+  return json({ code });
 }
 
 /**
@@ -290,6 +331,7 @@ async function whoPlays(req: Request, raw: unknown): Promise<{ member: string; n
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  if (url.searchParams.has("code")) return myCode(req);
   if (!url.searchParams.has("board")) return json({ ok: true, ranges: RANGES.map((r) => r.label) });
   const all = url.searchParams.get("period") === "all";
   const zkey = all ? "hj:b:all" : `hj:b:${today()}`;
@@ -331,13 +373,16 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
   const text = typeof body.text === "string" ? body.text : "";
   if (!handle && text.trim().length < 2) return { line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" };
 
-  const found = await lookUp(text, handle ?? handleFromText(text));
+  // The shortcut reads the creator's public profile from the phone (Instagram often turns
+  // cloud servers away) and sends the "1,570 Followers" bit as `profile`.
+  const phoneCount = handle ? countFromText(String(body.profile ?? "")) : null;
+  const found = handle && phoneCount !== null ? await remember({ handle, followers: phoneCount }) : await lookUp(text, handle ?? handleFromText(text));
   if ("error" in found) return { line: found.error, error: "lookup" };
   if (!found.handle) return { line: "Couldn't spot the creator on this screen. Try when their name is showing.", error: "no_handle" };
   if (found.followers === null) return { line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" };
 
   const band = score(guess, found.followers);
-  const player = await whoPlays(req, body.player);
+  const player = await whoPlays(req, body.player, body.code);
   const key = `hj:p:${player.member}`;
   const prev = JSON.parse(String((await kv([["GET", key]]))[0] || "{}")) as { total?: number; streak?: number };
   const streak = band.points > 0 ? (prev.streak || 0) + 1 : 0;
@@ -352,7 +397,8 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
 
   // Three short lines: the verdict, the real answer, your running score.
   const head = band.points === 3 ? "🎯 Nailed it! +3" : band.points === 1 ? "👍 Close! +1" : "❌ Miss";
-  const line = `${head}\nReal answer: ${short(found.followers)} followers\nYour score: ${total}${streak > 1 ? ` · 🔥 ${streak} in a row` : ""}`;
+  const said = String(body.guess).trim().toUpperCase();
+  const line = `${head}\n@${found.handle} has ${short(found.followers)} · you said ${said}\nYour score: ${total}${streak > 1 ? ` · 🔥 ${streak} in a row` : ""}`;
   return { line, band: band.name, points: band.points, followers: found.followers, handle: found.handle, total, streak, signedIn: !!player.uid };
 }
 
@@ -361,6 +407,12 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
  * so anything that goes wrong still reads as a sentence on the phone.
  */
 export async function POST(req: Request) {
+  // Step one for the shortcut: just name the creator, quickly, so the phone can open their profile.
+  if (new URL(req.url).searchParams.has("who")) {
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const who = handleFromText(typeof body.text === "string" ? body.text : "") ?? "";
+    return new Response(who, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
   const out = await round(req);
   if (new URL(req.url).searchParams.get("format") === "text") {
     return new Response(out.line, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
