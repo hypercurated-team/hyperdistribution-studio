@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "HyperJudge",
+    "slug": "hyperjudge",
+    "scheme": "hyperjudge",
+    "version": "1.0.0",
+    "owner": "kraftxworks",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0B0D1A",
+    "platforms": ["ios"],
+    "ios": {
+      "bundleIdentifier": "com.kraftxworks.hyperjudge",
+      "supportsTablet": false,
+      "config": { "usesNonExemptEncryption": false },
+      "infoPlist": { "NSSupportsLiveActivities": true },
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.kraftxworks.hyperjudge"]
+      }
+    },
+    "plugins": [
+      "@bacons/apple-targets",
+      ["expo-build-properties", { "ios": { "deploymentTarget": "17.0" } }]
+    ]
+  }
+}
