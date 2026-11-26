@@ -97,12 +97,15 @@ function onApp(m: Record<string, unknown>) {
 let soon: ReturnType<typeof setTimeout> | undefined;
 const changedSoon = () => { clearTimeout(soon); soon = setTimeout(changed, 250); };
 
+// Listen to the app from the moment this module loads: the shell reports its version and abilities as soon as
+// the page finishes loading, which can be before setup() runs.
+if (isNative) (window as unknown as { __hmFromApp: typeof onApp }).__hmFromApp = onApp;
+
 export const phone = {
   state,
   available: isNative,
   setup() {
     if (!isNative) return;
-    (window as unknown as { __hmFromApp: typeof onApp }).__hmFromApp = onApp;
     addMediaSource(() => state.files.concat(state.items));
     insights.load().then(changed);
   },
