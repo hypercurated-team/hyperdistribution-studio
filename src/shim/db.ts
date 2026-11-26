@@ -32,9 +32,12 @@ function load() {
 }
 
 function snapshot(name: string): Snap {
-  const merged = new Map(virtual.get(name)?.() ?? []);
-  for (const [id, d] of col(name)) merged.set(id, d);
-  return { docs: [...merged].map(([id, d]) => ({ id, exists: true, data: () => structuredClone(d) })) };
+  // Virtual docs (a media folder, the phone's library) are read-only and can number tens of
+  // thousands, so they're handed out as cheap shallow copies; stored docs are deep-copied.
+  const docs = new Map<string, { id: string; exists: boolean; data: () => Data }>();
+  for (const [id, d] of virtual.get(name)?.() ?? []) docs.set(id, { id, exists: true, data: () => ({ ...d }) });
+  for (const [id, d] of col(name)) docs.set(id, { id, exists: true, data: () => structuredClone(d) });
+  return { docs: [...docs.values()] };
 }
 
 function emit(name: string) {
