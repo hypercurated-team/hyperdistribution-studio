@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { folder } from "../../shim/folder";
+import { phone } from "../../shim/phone";
 import { db, docsOf } from "../../shim/db";
 import { saveFile } from "../../shim/native";
 import { isMobile } from "../../shim/platform";
@@ -31,7 +32,8 @@ export default function Connect({ brands }: ScreenProps) {
   const builtIn = claudeStatus.builtIn();
   const claude = ownKey || builtIn;
   const license = settingsStore.license();
-  const media = f.items.length;
+  const ps = phone.state;
+  const media = f.items.length + ps.items.length + ps.files.length;
   const heygen = !!settingsStore.heygen();
   const c = conn.get();
   const done = [claude, media > 0, !!license].filter(Boolean).length;
@@ -65,7 +67,7 @@ export default function Connect({ brands }: ScreenProps) {
 
   const rows = [
     { key: "claude", g: "Cl", c: "#B4532A", label: "Claude", sub: builtIn && !ownKey ? `Built in. ${claudeStatus.dailyLimit() || 20} free AI actions a day` : ownKey ? "Using your own Claude key" : "Your API key powers brains and drafts", on: claude, act: () => setSheet("claude") },
-    { key: "media", g: "Me", c: "#5C6176", label: isMobile ? "Photos and clips" : "Media folder", sub: media ? `${f.name || "Picked"} · ${media} files, read on this device` : "Clips, photos and music for edits. Never uploaded.", on: media > 0, act: pickFolder },
+    ...(phone.available ? [] : [{ key: "media", g: "Me", c: "#5C6176", label: isMobile ? "Photos and clips" : "Media folder", sub: media ? `${f.name || "Picked"} · ${media} files, read on this device` : "Clips, photos and music for edits. Never uploaded.", on: media > 0, act: pickFolder }]),
     { key: "license", g: "Rv", c: "#3846F0", label: "Video rendering", sub: license ? "Remotion renders edits on this device" : "Turn on to render videos on this device", on: !!license, act: () => setSheet("license") },
   ];
   const extras = [
@@ -100,6 +102,44 @@ export default function Connect({ brands }: ScreenProps) {
           ))}
         </div>
       </section>
+
+      {phone.available && (
+        <section className="stack" aria-labelledby="c-src">
+          <div className="eyebrow" id="c-src">Media sources</div>
+          <div className="card list">
+            <div className="item">
+              <span className="mono" style={{ background: "#E8367A", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">Ph</span>
+              <div className="grow stack" style={{ gap: 0 }}>
+                <strong>Phone photos</strong>
+                <span className="small muted">{
+                  ps.scanning ? `Scanning… ${ps.items.length.toLocaleString()} so far`
+                  : ps.access === "none" ? "Not allowed. Turn it on in Settings › HyperMixer › Photos."
+                  : ps.access === "all" || ps.access === "limited" ? `${ps.items.length.toLocaleString()} ${ps.access === "limited" ? "you allowed" : "photos and videos"} · read on this phone`
+                  : "The photos and videos you allow. Never uploaded."
+                }</span>
+                {ps.vision.total > 0 && ps.vision.available && ps.vision.done < ps.vision.total && (
+                  <span className="small muted row" style={{ gap: 8 }}>
+                    {ps.vision.running ? "Understanding your photos" : "Paused"}: {ps.vision.done.toLocaleString()} of {ps.vision.total.toLocaleString()}
+                    <button type="button" className="btn pill" style={{ minHeight: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (ps.vision.running ? phone.pauseIndex() : phone.index())}>{ps.vision.running ? "Pause" : "Resume"}</button>
+                  </span>
+                )}
+              </div>
+              {ps.access === "limited" && !ps.scanning
+                ? <button type="button" className="btn pill" onClick={() => phone.changeSelection()}>Change</button>
+                : ps.access === "all" ? <button type="button" className="btn pill" disabled={ps.scanning} onClick={() => phone.scan()} style={{ color: "var(--ok)" }}><Icon name="check" size={16} stroke={2.6} />On</button>
+                : <button type="button" className="btn pill primary" disabled={ps.scanning} onClick={() => phone.scan()}>Scan</button>}
+            </div>
+            <div className="item">
+              <span className="mono" style={{ background: "#0A66C2", width: 36, height: 36, fontSize: 13, borderRadius: 10 }} aria-hidden="true">Fi</span>
+              <div className="grow stack" style={{ gap: 0 }}>
+                <strong>Files and cloud</strong>
+                <span className="small muted">{ps.files.length ? `${ps.files.length} added · ` : ""}OneDrive, Google Drive, Dropbox, iCloud Drive</span>
+              </div>
+              <button type="button" className={`btn pill ${ps.files.length ? "" : "primary"}`} onClick={() => phone.pickFiles()}>Add</button>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="stack" aria-labelledby="c-more">
         <div className="eyebrow" id="c-more">Optional</div>

@@ -3,7 +3,7 @@
     "name": "HyperMixer",
     "slug": "hypermixer",
     "scheme": "hypermixer",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -23,7 +23,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "HyperMixer uses the camera when you choose to shoot a photo or clip for a post.",
         "NSMicrophoneUsageDescription": "HyperMixer records sound when you shoot a clip for a post.",
-        "NSPhotoLibraryUsageDescription": "HyperMixer reads the photos and clips you pick so you can edit them into posts. Nothing is uploaded.",
+        "NSPhotoLibraryUsageDescription": "HyperMixer reads the photos and videos you allow so it can build edits on your phone. Nothing is uploaded.",
         "NSPhotoLibraryAddUsageDescription": "HyperMixer saves the videos you export to your photo library."
       }
     },
@@ -53,6 +53,18 @@
           "dark": {
             "backgroundColor": "#0E1017"
           }
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "HyperMixer reads the photos and videos you allow so it can build edits on your phone. Nothing is uploaded.",
+          "savePhotosPermission": "HyperMixer saves the videos you export to your photo library.",
+          "granularPermissions": [
+            "photo",
+            "video"
+          ],
+          "preventAutomaticLimitedAccessAlert": true
         }
       ]
     ],

@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["HmVisionModule"] },
+  "android": { "modules": ["expo.modules.hmvision.HmVisionModule"] }
+}

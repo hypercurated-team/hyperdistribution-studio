@@ -11,7 +11,7 @@ type Kind = "video" | "image" | "audio";
 export type FolderItem = {
   id: string; name: string; path: string; kind: Kind; size: number;
   assetUrl: string; thumbUrl?: string; durationSec?: number; width?: number; height?: number;
-  takenAt: number; addedAt: number; tags: string[]; description: string; source: "folder";
+  takenAt: number; addedAt: number; tags: string[]; description: string; source: "folder" | "phone" | "files";
 };
 type DirHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterable<FileSystemHandle>;
@@ -29,8 +29,12 @@ const MAX = 3000;
 const kindOf = (n: string) => EXT[n.split(".").pop()?.toLowerCase() ?? ""];
 
 const state = { name: "", items: [] as FolderItem[], scanning: false, stored: null as DirHandle | null };
-const publish = () => setVirtual("media", () => new Map(state.items.map((i) => [i.id, i as unknown as Record<string, unknown>])));
+// Other media sources (the phone's library and picked files inside the app) join the same list.
+const sources: (() => FolderItem[])[] = [];
+export const addMediaSource = (fn: () => FolderItem[]) => { sources.push(fn); changed(); };
+const publish = () => setVirtual("media", () => new Map(state.items.concat(...sources.map((f) => f())).map((i) => [i.id, i as unknown as Record<string, unknown>])));
 const changed = () => { publish(); window.dispatchEvent(new Event("hds:folder")); };
+export const mediaChanged = () => changed();
 
 async function walk(dir: DirHandle, prefix: string, out: { file: File; path: string }[]) {
   for await (const h of dir.values()) {
