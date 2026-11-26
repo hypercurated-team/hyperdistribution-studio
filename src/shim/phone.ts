@@ -21,7 +21,16 @@ const byId = new Map<string, FolderItem>();
 const waiting = new Map<string, { parts: string[]; mime: string; ok: (b: Blob) => void; no: (e: Error) => void }>();
 const asked = new Set<string>();
 
-const changed = () => mediaChanged();
+// Publishing the media list is O(library size), so while a big scan streams in,
+// publish at most once a second; everything else publishes right away.
+let lastPublish = 0, trailing: ReturnType<typeof setTimeout> | undefined;
+const changed = () => {
+  clearTimeout(trailing);
+  const wait = state.scanning ? 1000 - (Date.now() - lastPublish) : 0;
+  if (wait > 0) { trailing = setTimeout(changed, wait); return; }
+  lastPublish = Date.now();
+  mediaChanged();
+};
 
 const toItem = (w: Wire): FolderItem => {
   const it: FolderItem = {
@@ -41,7 +50,7 @@ function onApp(m: Record<string, unknown>) {
       else { state.items = []; }
       return changed();
     case "media-items":
-      state.items = state.items.concat((m.items as Wire[]).map(toItem));
+      for (const w of m.items as Wire[]) state.items.push(toItem(w));
       if (m.done) { state.scanning = false; phone.index(); }
       changed();
       // Previews for the newest items, so the grid and Auto-pick have something to show.

@@ -11,6 +11,9 @@ import { HmVision } from "./modules/hm-vision";
  * drives. Everything is read on the phone and handed to the page in pieces;
  * nothing is uploaded.
  *
+ * The whole allowed library is scanned (tens of thousands is fine): only
+ * metadata goes over at first, in pages of 400.
+ *
  * Item ids: "p:<asset id>|<name>" for the photo library, "d:<n>|<name>" for
  * picked files. Images are handed over as JPEG, so their names end in .jpg.
  */
@@ -18,7 +21,6 @@ export type Send = (m: Record<string, unknown>) => void;
 type Item = { id: string; name: string; kind: "image" | "video"; w?: number; h?: number; d?: number; t?: number; src: "phone" | "files" };
 
 const PAGE = 400;
-const MAX_ITEMS = 20000;
 const CHUNK = 1_500_000;
 const docs = new Map<string, { uri: string; kind: "image" | "video" }>();
 
@@ -44,7 +46,7 @@ export async function scan(send: Send) {
       return { id: `p:${a.id}|${name}`, name, kind, w: a.width ?? undefined, h: a.height ?? undefined, d: a.duration ?? undefined, t: a.creationTime ?? undefined, src: "phone" };
     });
     offset += page.length;
-    const done = page.length < PAGE || offset >= MAX_ITEMS;
+    const done = page.length < PAGE;
     send({ type: "media-items", items, done, total: offset });
     if (done) break;
   }
