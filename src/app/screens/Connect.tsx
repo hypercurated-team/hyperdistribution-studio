@@ -117,6 +117,12 @@ export default function Connect({ brands }: ScreenProps) {
                   : ps.access === "all" || ps.access === "limited" ? `${ps.items.length.toLocaleString()} ${ps.access === "limited" ? "you allowed" : "photos and videos"} · read on this phone`
                   : "The photos and videos you allow. Never uploaded."
                 }</span>
+                {ps.vision.total > 0 && ps.vision.available && ps.vision.done < ps.vision.total && (
+                  <span className="small muted row" style={{ gap: 8 }}>
+                    {ps.vision.running ? "Understanding your photos" : "Paused"}: {ps.vision.done.toLocaleString()} of {ps.vision.total.toLocaleString()}
+                    <button type="button" className="btn pill" style={{ minHeight: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (ps.vision.running ? phone.pauseIndex() : phone.index())}>{ps.vision.running ? "Pause" : "Resume"}</button>
+                  </span>
+                )}
               </div>
               {ps.access === "limited" && !ps.scanning
                 ? <button type="button" className="btn pill" onClick={() => phone.changeSelection()}>Change</button>

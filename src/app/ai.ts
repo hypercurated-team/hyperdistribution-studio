@@ -2,6 +2,7 @@ import { claudeStatus, sample } from "../shim/services";
 import { apiUrl } from "../shim/platform";
 import { PLATFORMS } from "./platforms";
 import { contactSheet, shrink, SHEET_MAX } from "./images";
+import { insights } from "../shim/insights";
 import type { Brain, Brand, Media, Post } from "./store";
 
 /** True when Claude can be used: built in by HyperMixer, or the person added their own key. */
@@ -33,6 +34,12 @@ Reply with only JSON:
   return { brain, read: texts.length, seen: images.length };
 }
 
+/** A one-line summary of what the person's camera roll shows (group counts only, never photos). */
+function library() {
+  const top = insights.counts().slice(0, 6);
+  return top.length ? `Their camera roll mostly shows: ${top.map(([g, n]) => `${g} ${n}`).join(", ")}. Prefer post ideas they can shoot or already have footage for.\n` : "";
+}
+
 export type Draft = { channelId: string; format: string; hook: string; caption: string; why: string };
 
 /** Asks Claude for fresh post drafts for one brand, spread across its channels. */
@@ -42,7 +49,7 @@ export async function draftPosts(brand: Brand, count = 5): Promise<Draft[]> {
   const out = (await sample.json(`You write social posts for ${brand.name}.
 Brand brain: ${JSON.stringify(brand.brain ?? { summary: brand.industry ?? "" })}
 Channels: ${JSON.stringify(chans)}
-Write ${count} new post drafts, spread across the channels, each native to its platform and true to the brand's voice and pillars. No invented facts, prices or statistics; use [placeholders] where a fact is needed.
+${library()}Write ${count} new post drafts, spread across the channels, each native to its platform and true to the brand's voice and pillars. No invented facts, prices or statistics; use [placeholders] where a fact is needed.
 Reply with only JSON: {"drafts":[{"channelId":"one of the channel ids","format":"one of that channel's formats","hook":"the first line or on-screen hook, under 12 words","caption":"the full caption or script, ready to post","why":"which pillar, 2-4 words"}]}`, { quick: true })) as { drafts?: Draft[] };
   const ids = new Set(chans.map((c) => c.id));
   return (out.drafts ?? []).filter((d) => d && ids.has(d.channelId) && d.hook);

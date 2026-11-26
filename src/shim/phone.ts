@@ -1,4 +1,5 @@
 import { addMediaSource, mediaChanged, type FolderItem } from "./folder";
+import { insights, type Insight } from "./insights";
 import { isNative, postToApp } from "./platform";
 
 /**
@@ -10,7 +11,12 @@ import { isNative, postToApp } from "./platform";
 type Wire = { id: string; name: string; kind: "image" | "video"; w?: number; h?: number; d?: number; t?: number; src: "phone" | "files" };
 export type Access = "unknown" | "all" | "limited" | "none" | "error";
 
-const state = { access: "unknown" as Access, scanning: false, items: [] as FolderItem[], files: [] as FolderItem[] };
+const state = {
+  access: "unknown" as Access, scanning: false, items: [] as FolderItem[], files: [] as FolderItem[],
+  /** On-phone understanding of the library: progress of the indexer. */
+  vision: { available: true, running: false, paused: false, done: 0, total: 0 },
+};
+const visionWait = new Map<string, (r: { results: Omit<Insight, "groups">[]; unavailable?: boolean }) => void>();
 const byId = new Map<string, FolderItem>();
 const waiting = new Map<string, { parts: string[]; mime: string; ok: (b: Blob) => void; no: (e: Error) => void }>();
 const asked = new Set<string>();
@@ -36,7 +42,7 @@ function onApp(m: Record<string, unknown>) {
       return changed();
     case "media-items":
       state.items = state.items.concat((m.items as Wire[]).map(toItem));
-      if (m.done) state.scanning = false;
+      if (m.done) { state.scanning = false; phone.index(); }
       changed();
       // Previews for the newest items, so the grid and Auto-pick have something to show.
       if (state.items.length <= 400) phone.previews(state.items.slice(0, 96).map((i) => i.id));
@@ -51,6 +57,10 @@ function onApp(m: Record<string, unknown>) {
       const it = byId.get(m.id as string);
       if (it && m.data) { it.thumbUrl = "data:image/jpeg;base64," + m.data; changedSoon(); }
       return;
+    }
+    case "vision-results": {
+      const r = visionWait.get(m.req as string); visionWait.delete(m.req as string);
+      return r?.({ results: (m.results as Omit<Insight, "groups">[]) ?? [], unavailable: !!m.unavailable });
     }
     case "file-start": { const w = waiting.get(m.req as string); if (w) w.mime = String(m.mime || ""); return; }
     case "file-chunk": waiting.get(m.req as string)?.parts.push(m.data as string); return;
@@ -77,6 +87,7 @@ export const phone = {
     if (!isNative) return;
     (window as unknown as { __hmFromApp: typeof onApp }).__hmFromApp = onApp;
     addMediaSource(() => state.files.concat(state.items));
+    insights.load().then(changed);
   },
   scan() {
     state.scanning = true; changed(); postToApp({ type: "media-scan" });
@@ -91,6 +102,45 @@ export const phone = {
     if (want.length) postToApp({ type: "media-thumbs", ids: want });
   },
   isPhoneItem: (id: string) => byId.has(id),
+  /** The live item (its preview may have arrived since the last snapshot). */
+  item: (id: string) => byId.get(id),
+  /**
+   * Understands the library on the phone, newest first, 50 at a time, a few
+   * seconds apart so the phone stays responsive. Resumes where it left off.
+   */
+  async index() {
+    const v = state.vision;
+    if (!isNative || v.running || !v.available) return;
+    await insights.load();
+    v.running = true; v.paused = false;
+    const lib = () => state.items.filter((i) => i.source === "phone");
+    try {
+      for (;;) {
+        const todo = lib().filter((i) => !insights.has(i.id));
+        v.total = lib().length; v.done = v.total - todo.length; changed();
+        if (!todo.length || v.paused) break;
+        const req = Math.random().toString(36).slice(2);
+        const res = await new Promise<{ results: Omit<Insight, "groups">[]; unavailable?: boolean }>((ok) => {
+          visionWait.set(req, ok);
+          postToApp({ type: "vision-analyze", req, ids: todo.slice(0, 50).map((i) => i.id) });
+          setTimeout(() => { if (visionWait.delete(req)) ok({ results: [] }); }, 120_000);
+        });
+        if (res.unavailable) { v.available = false; break; }
+        // Items the phone couldn't read (e.g. only in iCloud) are saved too, so they aren't retried forever.
+        const got = new Set(res.results.map((r) => r.id));
+        const missed = todo.slice(0, 50).filter((i) => !got.has(i.id)).map((i) => ({ id: i.id, labels: [], faces: 0, quality: 0.4, isScreenshot: false, isBlurry: false }));
+        await insights.save([...res.results, ...missed]);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } finally { v.running = false; changed(); }
+  },
+  pauseIndex() { state.vision.paused = true; changed(); },
+  /** Previews for these ids, waiting up to a few seconds for them to arrive. */
+  async previewsReady(ids: string[], ms = 8000) {
+    phone.previews(ids);
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms && ids.some((id) => byId.has(id) && !byId.get(id)!.thumbUrl)) await new Promise((r) => setTimeout(r, 200));
+  },
   /** Makes sure these items have their full file, fetching from the phone as needed. */
   async ensureFiles(ids: string[]) {
     for (const id of ids) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { folder } from "../../shim/folder";
 import { phone } from "../../shim/phone";
+import { GROUPS, insights } from "../../shim/insights";
 import { settingsStore } from "../../shim/services";
 import { go, type ScreenProps } from "../App";
 import { hasKey, pickClips } from "../ai";
@@ -57,7 +58,14 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
     .filter((m) => m.kind === "video" || m.kind === "image")
     .sort((a, b) => (b.takenAt ?? 0) - (a.takenAt ?? 0));
   const [limit, setLimit] = useState(48);
-  const shown = media.slice(0, limit);
+  // On-phone understanding: filter by what's in the photo, best first, hide screenshots and blurry shots.
+  const [group, setGroup] = useState("all");
+  const [hideJunk, setHideJunk] = useState(true);
+  const junk = (id: string) => { const i = insights.get(id); return !!i && (i.isScreenshot || i.isBlurry); };
+  const filtered = media.filter((m) => !(hideJunk && junk(m.id)) && (group === "all" || group === "best" || !!insights.get(m.id)?.groups.includes(group)));
+  const ordered = group === "best" ? [...filtered].sort((a, b) => (insights.get(b.id)?.quality ?? 0.5) - (insights.get(a.id)?.quality ?? 0.5)) : filtered;
+  const chips = insights.size() ? insights.counts(media.map((m) => m.id)).slice(0, 6) : [];
+  const shown = ordered.slice(0, limit);
   const shownKey = shown.map((m) => m.id).join(",");
   // Inside the app, ask the phone for previews of what's on screen.
   useEffect(() => { if (phone.available) phone.previews(shown.map((m) => m.id)); }, [shownKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -86,9 +94,20 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
     if (!hasKey()) return toast("Claude isn't switched on yet");
     setPicking(true);
     try {
-      // Candidates: what's already picked, then the newest with previews (Claude sees up to 24).
-      const ranked = [...media.filter((m) => clips.includes(m.id)), ...media.filter((m) => !clips.includes(m.id))];
-      const order = await pickClips({ title, notes, format: post.format }, ranked, length);
+      // Rank the whole library on the phone: what fits the script, how good it is, how recent.
+      // Only the top 24 previews go to Claude, which picks and orders the clips.
+      const words = `${title} ${notes}`.toLowerCase();
+      const wanted = GROUPS.filter(([, rx]) => rx.test(words)).map(([g]) => g);
+      const now = Date.now();
+      const score = (m: (typeof media)[number]) => {
+        const i = insights.get(m.id);
+        const fit = i ? i.groups.filter((g) => wanted.includes(g)).length + i.labels.filter((l) => words.includes(l.name.toLowerCase())).length : 0;
+        const age = Math.min(1, (now - (m.takenAt ?? 0)) / (90 * 86_400_000));
+        return (clips.includes(m.id) ? 5 : 0) + fit * 3 + (i?.quality ?? 0.5) * 2 + (1 - age);
+      };
+      const top = media.filter((m) => !junk(m.id)).map((m) => [score(m), m] as const).sort((a, b) => b[0] - a[0]).slice(0, 24).map(([, m]) => m);
+      if (phone.available) await phone.previewsReady(top.map((m) => m.id));
+      const order = await pickClips({ title, notes, format: post.format }, top.map((m) => ({ ...m, thumbUrl: phone.item(m.id)?.thumbUrl ?? m.thumbUrl })), length);
       if (order.length) { setClips(order); toast(`Claude picked ${order.length} clip${order.length > 1 ? "s" : ""}`); }
       else toast("Claude didn't find clips that fit. Pick them yourself.");
     } catch (e) { toast(errText(e)); }
@@ -154,6 +173,14 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
               <button type="button" className="btn pill" onClick={connect}>{phone.available ? (phone.state.items.length ? "Add files" : "Scan phone") : media.length ? "Change" : "Add media"}</button>
             </div>
           </div>
+          {chips.length > 0 && (
+            <div className="row" style={{ gap: 6, overflowX: "auto", flexWrap: "nowrap", margin: "0 -14px", padding: "0 14px 2px", scrollbarWidth: "none" }} role="group" aria-label="Filter clips">
+              {[["all", "All"], ["best", "Best"], ...chips.map(([g, n]) => [g, `${g[0].toUpperCase()}${g.slice(1)} · ${n}`])].map(([k, l]) => (
+                <button key={k} type="button" className={`btn pill ${group === k ? "on" : ""}`} aria-pressed={group === k} onClick={() => { setGroup(k); setLimit(48); }}>{l}</button>
+              ))}
+              <button type="button" className={`btn pill ${hideJunk ? "on" : ""}`} aria-pressed={hideJunk} onClick={() => setHideJunk(!hideJunk)}>Hide screenshots</button>
+            </div>
+          )}
           {media.length ? (
             <div className="clips">
               {shown.map((m) => {
@@ -167,7 +194,7 @@ function Editor({ post, brand }: { post: Post; brand?: Brand }) {
               })}
             </div>
           ) : <p className="small muted" style={{ margin: 0 }}>{phone.available ? "Scan your phone's photos, or add files from OneDrive, Google Drive or Dropbox. They're read on this phone and never uploaded." : "Add the photos and clips to cut from. They're read on this device and never uploaded."}</p>}
-          {media.length > limit && <button type="button" className="btn pill" style={{ alignSelf: "center" }} onClick={() => setLimit((n) => n + 48)}>Show more · {(media.length - limit).toLocaleString()}</button>}
+          {ordered.length > limit && <button type="button" className="btn pill" style={{ alignSelf: "center" }} onClick={() => setLimit((n) => n + 48)}>Show more · {(ordered.length - limit).toLocaleString()}</button>}
           <div className="row wrap">
             <div className="field grow" style={{ minWidth: 150 }}>
               <label htmlFor="e-style">Style</label>
