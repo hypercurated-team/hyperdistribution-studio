@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import * as Updates from "expo-updates";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -48,6 +49,24 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(() => (auth.get("setupDone") === "1" ? "play" : "setup"));
   const [me, setMe] = useState(auth.account);
   const [signIn, setSignIn] = useState(false);
+
+  // Apply a new over-the-air update right away instead of on the next launch.
+  useEffect(() => {
+    const check = async () => {
+      if (__DEV__ || !Updates.isEnabled) return;
+      try {
+        const r = await Updates.checkForUpdateAsync();
+        if (!r.isAvailable) return;
+        await Updates.fetchUpdateAsync();
+        await Updates.reloadAsync();
+      } catch {}
+    };
+    check();
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") check();
+    });
+    return () => sub.remove();
+  }, []);
 
   // Tapping the Dynamic Island opens hyperjudge://wheel: go straight to the wheel.
   useEffect(() => {
