@@ -52,6 +52,14 @@ export default function Connect({ brands }: ScreenProps) {
   const heygen = !!settingsStore.heygen();
   const done = [claude, media > 0, !!license].filter(Boolean).length;
 
+  const [deleting, setDeleting] = useState(false);
+  const deleteAccount = async () => {
+    if (!confirm("Delete your HyperMixer account? This removes your account and everything synced to it. Brands and posts on this device stay until you remove the app. This can't be undone.")) return;
+    setDeleting(true);
+    try { await sync.wipeAccount(); await auth.deleteAccount(); toast("Account deleted"); }
+    catch (e) { toast(errText(e)); }
+    setDeleting(false);
+  };
   const pickFolder = async () => {
     try { await folder.connect(); } catch (e) { if ((e as Error).name !== "AbortError") toast("Couldn't open that folder"); }
   };
@@ -113,6 +121,11 @@ export default function Connect({ brands }: ScreenProps) {
                 : <button type="button" className="btn pill primary" onClick={() => dispatchEvent(new Event("hm:need-signin"))}>Sign in</button>}
             </div>
           </div>
+          {acct && (
+            <button type="button" className="btn pill" style={{ alignSelf: "flex-start", color: "var(--bad)" }} disabled={deleting} onClick={deleteAccount}>
+              {deleting ? "Deleting account…" : "Delete account"}
+            </button>
+          )}
         </section>
       )}
 

@@ -49,6 +49,7 @@ const words = (code = "") =>
     WEAK_PASSWORD: "Use at least 6 characters for the password.",
     TOO_MANY_ATTEMPTS_TRY_LATER: "Too many tries. Wait a few minutes and try again.",
     USER_DISABLED: "This account has been turned off.",
+    CREDENTIAL_TOO_OLD_LOGIN_AGAIN: "For your safety, sign out, sign back in, then delete your account.",
   })[code.split(" ")[0].split(":")[0]] ?? "Sign-in didn't work. Try again.";
 
 /** Loads the public Firebase config from HyperMixer. */
@@ -146,6 +147,17 @@ export async function idToken(force = false): Promise<string | null> {
   set("idTokenExp", String(Date.now() / 1000 + Number(j.expires_in || 3600)));
   if (j.refresh_token) set("refresh", j.refresh_token);
   return j.id_token;
+}
+
+/** Deletes the account for good: leaderboard entries first (needs the token), then the sign-in itself. */
+export async function deleteAccount() {
+  const id = await idToken(true);
+  if (!id) throw fail("Sign in again, then delete your account.");
+  const r = await fetch(`${WEB}/api/judge`, { method: "DELETE", headers: { authorization: `Bearer ${id}` } }).catch(() => null);
+  if (!r?.ok) throw fail("Couldn't reach HyperJudge. Try again.");
+  await rest("accounts:delete", { idToken: id });
+  signOut();
+  for (const k of ["code", "player"]) set(k, null);
 }
 
 export function signOut() {

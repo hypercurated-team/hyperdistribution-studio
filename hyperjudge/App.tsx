@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Linking,
   Modal,
@@ -198,8 +199,17 @@ function Play({ c, onSetup }: { c: C; onSetup: () => void }) {
           <Text style={s.buttonText}>Open Instagram</Text>
         </Pressable>
         <Text style={[s.small, { color: c.dim, textAlign: "center" }]}>
-          Your rounds count on the leaderboard under this iPhone's name.
+          Your rounds count on the leaderboard under your name.
         </Text>
+      </View>
+      <View style={[s.card, { backgroundColor: c.card }]}>
+        <Text style={[s.small, { color: c.dim }]}>SCORING</Text>
+        <Text style={[s.body, { color: c.text }]}>
+          Same step: <Text style={{ fontWeight: "700" }}>3 points</Text>
+          {"\n"}One step off: <Text style={{ fontWeight: "700" }}>1 point</Text>
+          {"\n"}Further: 0
+        </Text>
+        <Text style={[s.small, { color: c.dim }]}>Steps: {STEPS.join(" · ")}</Text>
       </View>
     </ScrollView>
   );
@@ -445,6 +455,18 @@ function SignInSheet({ c, open, me, onClose, onChange }: { c: C; open: boolean; 
               style={[s.card, { backgroundColor: c.card, alignItems: "center" }]}
             >
               <Text style={[s.body, { color: "#FF3B30" }]}>Sign out</Text>
+            </Pressable>
+            <Pressable
+              disabled={busy}
+              onPress={() =>
+                Alert.alert("Delete your account?", "This removes your account, your leaderboard code and your scores. It can't be undone.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Delete", style: "destructive", onPress: () => go(() => auth.deleteAccount()) },
+                ])
+              }
+              style={[s.card, { backgroundColor: c.card, alignItems: "center" }]}
+            >
+              <Text style={[s.body, { color: "#FF3B30" }]}>{busy ? "Deleting…" : "Delete account"}</Text>
             </Pressable>
           </>
         ) : (

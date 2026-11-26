@@ -403,6 +403,24 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
 }
 
 /**
+ * DELETE /api/judge (signed in): removes the person's leaderboard name, code,
+ * running score and board entries. The app then deletes the sign-in account.
+ */
+export async function DELETE(req: Request) {
+  const who = await personFrom(req).catch(() => null);
+  if (!who || who === "bad") return json({ error: "Sign in first." }, 401);
+  const code = (await kv([["GET", `hj:ucode:${who.uid}`]]))[0] as string | null;
+  const days = [0, 1, 2].map((d) => new Date(Date.now() - d * DAY * 1000).toISOString().slice(0, 10));
+  await kv([
+    ["HDEL", "hj:n", who.uid],
+    ["DEL", `hj:ucode:${who.uid}`, `hj:p:${who.uid}`, ...(code ? [`hj:code:${code}`] : [])],
+    ["ZREM", "hj:b:all", who.uid],
+    ...days.map((d) => ["ZREM", `hj:b:${d}`, who.uid]),
+  ]);
+  return json({ ok: true });
+}
+
+/**
  * One round. The shortcut calls /api/judge?format=text and shows the reply as-is,
  * so anything that goes wrong still reads as a sentence on the phone.
  */
