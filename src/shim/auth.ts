@@ -165,11 +165,6 @@ export const auth = {
     });
     const j = await fetch(apiUrl("/api/auth")).then((r) => r.json()).catch(() => ({}));
     cfg = j.enabled ? j.config : null;
-    // Safari and in-app sign-in sheets block the cross-site storage that the
-    // firebaseapp.com sign-in page needs ("Unable to save initial state").
-    // On our own sites, Firebase's sign-in pages are proxied under /__/auth
-    // (vercel.json), so sign-in stays on this domain.
-    if (cfg && /(^|\.)(hyperdistribution-studio|hypermixer)\.vercel\.app$/.test(location.hostname)) cfg = { ...cfg, authDomain: location.host };
     state.enabled = !!cfg;
     state.required = !!j.requireSignIn;
     state.providers = j.providers ?? {};
