@@ -275,6 +275,8 @@ async function lookUp(text: string, handle: string | null): Promise<Found | { er
     return remember(found);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) return { error: "HyperJudge is busy. Try again in a minute." };
+    // Shows up in Vercel logs; never includes the key.
+    console.error("hyperjudge lookup failed", err instanceof Anthropic.APIError ? `${err.status} ${err.name}: ${err.message}` : String(err));
     return { error: "Couldn't reach the lookup right now. Try again." };
   }
 }

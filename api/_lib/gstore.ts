@@ -54,7 +54,13 @@ async function accessToken(): Promise<string> {
 }
 
 const base = () => `https://firestore.googleapis.com/v1/projects/${PROJECT()}/databases/(default)/documents`;
-const id = (s: string) => encodeURIComponent(s).replace(/\./g, "%2E");
+/**
+ * Firestore ids: the raw id goes in document names inside request bodies, and the same id
+ * percent-encoded goes in URL paths (Google decodes the path). Mixing the two once left
+ * the leaderboard writing "hj%3Ab%3A…" docs that the reads (path "hj:b:…") never found.
+ */
+const raw = (s: string) => (s === "." || s === ".." ? `_${s}` : s.replace(/\//g, "∕"));
+const id = (s: string) => encodeURIComponent(raw(s));
 const strDoc = (key: string) => `hyperjudge_kv/${id(key)}`;
 const zCol = (key: string) => `hyperjudge_z/${id(key)}/m`;
 const hCol = (key: string) => `hyperjudge_h/${id(key)}/f`;
@@ -87,7 +93,7 @@ async function setStr(key: string, v: string, ttlSec?: number) {
 }
 
 async function zincr(key: string, by: number, member: string) {
-  const name = `projects/${PROJECT()}/databases/(default)/documents/${zCol(key)}/${id(member)}`;
+  const name = `projects/${PROJECT()}/databases/(default)/documents/hyperjudge_z/${raw(key)}/m/${raw(member)}`;
   const out = await commit({
     method: "POST",
     body: JSON.stringify({
