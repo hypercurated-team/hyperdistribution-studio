@@ -9,21 +9,46 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0D1A",
-    "platforms": ["ios"],
+    "platforms": [
+      "ios"
+    ],
     "ios": {
       "bundleIdentifier": "com.kraftxworks.hyperjudge",
       "appleTeamId": "J7ZVMZND97",
       "supportsTablet": false,
-      "config": { "usesNonExemptEncryption": false },
-      "infoPlist": { "NSSupportsLiveActivities": true },
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSSupportsLiveActivities": true
+      },
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.kraftxworks.hyperjudge"]
+        "com.apple.security.application-groups": [
+          "group.com.kraftxworks.hyperjudge"
+        ]
       }
     },
     "plugins": [
       "@bacons/apple-targets",
-      ["expo-build-properties", { "ios": { "deploymentTarget": "17.0" } }]
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ]
     ],
-    "extra": { "eas": { "projectId": "1a48172d-b7a9-4e3d-8db9-23b54b07afc8" } }
+    "extra": {
+      "eas": {
+        "projectId": "1a48172d-b7a9-4e3d-8db9-23b54b07afc8"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1a48172d-b7a9-4e3d-8db9-23b54b07afc8"
+    }
   }
 }

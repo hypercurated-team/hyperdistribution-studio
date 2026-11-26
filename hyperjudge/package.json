@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build:preview": "npx eas-cli@latest build --profile preview --platform ios",
     "build:store": "npx eas-cli@latest build --profile production --platform ios",
-    "submit": "npx eas-cli@latest submit --platform ios"
+    "submit": "npx eas-cli@latest submit --platform ios",
+    "update": "npx eas-cli@latest update --channel production --platform ios --auto"
   },
   "dependencies": {
     "@bacons/apple-targets": "5.0.0",
@@ -21,6 +22,7 @@
     "expo-haptics": "~58.0.8",
     "expo-sharing": "~58.0.23",
     "expo-status-bar": "~58.0.5",
+    "expo-updates": "~58.0.22",
     "expo-web-browser": "~58.1.0",
     "react": "19.3.0",
     "react-native": "0.88.1",
