@@ -9,13 +9,19 @@ follower count in the Dynamic Island. Scores come from the HyperMixer server (`/
 
 ## How a round works
 
-1. AssistiveTouch runs the shortcut: Take Screenshot → Extract Text from Image →
-   **Start HyperJudge Round** (an action this app adds to Shortcuts).
-2. The Dynamic Island pops open: "How many followers? 10K" with < > (1K, 2K, 5K … 10M+),
-   Lock in and ✕. Long-press the island to open it again later.
+1. Set up once in the app: **Add shortcut** opens the share sheet with `assets/HyperJudge.shortcut`
+   (Take Screenshot → Extract Text from Image → **Start HyperJudge Round**, signed for anyone);
+   tap Shortcuts → Add Shortcut. **Open Settings** is for putting it on AssistiveTouch Single-Tap
+   or Back Tap. The setup card moves to the bottom once a round has run.
+2. Watching a reel, tap the button. The Dynamic Island pops open: "How many followers? 10K" with
+   < > (1K, 2K, 5K … 10M+), Lock in and ✕. Long-press the island to open it again later.
 3. Tap the island to open the app instead and use the scroll wheel.
 4. After Lock in the island shows "Judging…", then the result in plain words, e.g.
    "👌 Close! +1 · @x has 2.1M · you said 10K · 12 pts · 🔥 2 in a row". It clears after 8 seconds.
+
+The shortcut file is built from a plist and signed on a Mac with
+`shortcuts sign --mode anyone --input in.shortcut --output assets/HyperJudge.shortcut`.
+If the intent's name or the team id changes, rebuild and re-sign it.
 
 ## Where things are
 
@@ -23,6 +29,7 @@ follower count in the Dynamic Island. Scores come from the HyperMixer server (`/
 - `targets/widget/_shared/HJShared.swift`: round logic, the Shortcuts action and the island
   buttons. Linked into both the app and the widget by `@bacons/apple-targets`.
 - `modules/hj-live`: lets the React Native screen lock in a wheel guess (calls `HJBridge`).
+  Its Swift lives in `modules/hj-live/ios` (the root `/ios` is generated and ignored).
 - `App.tsx`: wheel, last result, leaderboard name, setup steps.
 
 ## Build

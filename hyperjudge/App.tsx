@@ -1,13 +1,18 @@
 import { ExtensionStorage } from "@bacons/apple-targets";
+import { Asset } from "expo-asset";
+import { File, Paths } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import {
+  AppState,
+  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
   ScrollView,
   type ScrollViewInstance,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import shortcutFile from "./assets/HyperJudge.shortcut";
 import HjLive from "./modules/hj-live";
 
 /** Same steps as the island and the server (api/judge.ts STEPS). */
@@ -46,6 +52,15 @@ const readResult = (): Result | null => {
   }
 };
 
+/** Opens the share sheet with the signed shortcut; picking Shortcuts there adds it in one tap. */
+const addShortcut = async () => {
+  const [asset] = await Asset.loadAsync(shortcutFile);
+  const named = new File(Paths.cache, "HyperJudge.shortcut");
+  if (named.exists) named.delete();
+  await new File(asset.localUri ?? asset.uri).copy(named);
+  await Share.share({ url: named.uri });
+};
+
 export default function App() {
   const dark = useColorScheme() === "dark";
   const c = dark ? colors.dark : colors.light;
@@ -54,12 +69,64 @@ export default function App() {
   const [result, setResult] = useState<Result | null>(readResult);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [ready, setReady] = useState(() => !!read("text"));
+  const [setupNote, setSetupNote] = useState("");
   const wheel = useRef<ScrollViewInstance>(null);
   const last = useRef(index);
 
   useEffect(() => {
     wheel.current?.scrollTo({ y: index * ROW, animated: false });
+    // Coming back from Settings, Shortcuts or a round: pick up the latest state.
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      setReady(!!read("text"));
+      setResult(readResult());
+    });
+    return () => sub.remove();
   }, []);
+
+  const onAddShortcut = () => {
+    setSetupNote("");
+    addShortcut().catch(() => setSetupNote("Couldn't open the shortcut. Try again."));
+  };
+
+  const setup = (
+    <>
+      <Text style={[s.section, { color: c.dim }]}>{ready ? "SETUP" : "SET UP ONCE · 1 MINUTE"}</Text>
+      <View style={[s.card, { backgroundColor: c.card }]}>
+        <View style={s.stepRow}>
+          <Text style={[s.num, { color: "#4C5BFF" }]}>1</Text>
+          <View style={{ flex: 1, gap: 8 }}>
+            <Text style={[s.body, { color: c.text }]}>Add the HyperJudge shortcut. In the sheet, tap Shortcuts, then Add Shortcut.</Text>
+            <Pressable onPress={onAddShortcut} style={({ pressed }) => [s.small, { opacity: pressed ? 0.6 : 1 }]}>
+              <Text style={s.smallText}>Add shortcut</Text>
+            </Pressable>
+            {setupNote ? <Text style={[s.note, { color: c.dim, textAlign: "left" }]}>{setupNote}</Text> : null}
+          </View>
+        </View>
+        <View style={s.stepRow}>
+          <Text style={[s.num, { color: "#4C5BFF" }]}>2</Text>
+          <View style={{ flex: 1, gap: 8 }}>
+            <Text style={[s.body, { color: c.text }]}>
+              Put it on a button. In Settings go to Accessibility → Touch → AssistiveTouch, turn it on and set Single-Tap to
+              HyperJudge. Or use Back Tap (same screen) → Double Tap → HyperJudge.
+            </Text>
+            <Pressable onPress={() => Linking.openSettings()} style={({ pressed }) => [s.small, { opacity: pressed ? 0.6 : 1 }]}>
+              <Text style={s.smallText}>Open Settings</Text>
+            </Pressable>
+          </View>
+        </View>
+        <View style={s.stepRow}>
+          <Text style={[s.num, { color: "#4C5BFF" }]}>3</Text>
+          <Text style={[s.body, { color: c.text, flex: 1 }]}>
+            {ready
+              ? "✓ Working. Watch a reel, tap your button, guess with < > in the Dynamic Island and tap Lock in."
+              : "Watch a reel on Instagram and tap your button. Guess with < > in the Dynamic Island and tap Lock in."}
+          </Text>
+        </View>
+      </View>
+    </>
+  );
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.min(Math.max(Math.round(e.nativeEvent.contentOffset.y / ROW), 0), STEPS.length - 1);
@@ -79,7 +146,7 @@ export default function App() {
 
   const lockIn = () => {
     if (!read("text")) {
-      setNote("Start a round from a reel first: tap your AssistiveTouch button while watching.");
+      setNote("Start a round from a reel first: finish the setup below, then tap your button while watching.");
       return;
     }
     if (!HjLive?.lockIn(index)) {
@@ -110,6 +177,8 @@ export default function App() {
           <Text style={[s.brand, { color: c.dim }]}>HYPERMIXER</Text>
           <Text style={[s.title, { color: c.text }]}>HyperJudge</Text>
           <Text style={[s.sub, { color: c.dim }]}>How many followers does this creator have?</Text>
+
+          {ready ? null : setup}
 
           <View style={[s.card, { backgroundColor: c.card }]}>
             <View style={s.wheelWrap}>
@@ -168,21 +237,7 @@ export default function App() {
             />
           </View>
 
-          <Text style={[s.section, { color: c.dim }]}>SET UP ONCE</Text>
-          <View style={[s.card, { backgroundColor: c.card }]}>
-            {[
-              "Open Shortcuts and make a new shortcut called HyperJudge.",
-              "Add Take Screenshot, then Extract Text from Image, then Start HyperJudge Round.",
-              "Settings → Accessibility → Touch → AssistiveTouch → on, then Single-Tap → HyperJudge.",
-              "Watch a reel and tap the button. Guess with < > in the Dynamic Island and tap Lock in.",
-              "Tap the island any time to come here and use the wheel instead.",
-            ].map((t, i) => (
-              <View key={i} style={s.stepRow}>
-                <Text style={[s.num, { color: "#4C5BFF" }]}>{i + 1}</Text>
-                <Text style={[s.body, { color: c.text, flex: 1 }]}>{t}</Text>
-              </View>
-            ))}
-          </View>
+          {ready ? setup : null}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -213,5 +268,7 @@ const s = StyleSheet.create({
   section: { fontSize: 13, marginTop: 12, marginLeft: 16 },
   input: { fontSize: 17, paddingVertical: 10 },
   stepRow: { flexDirection: "row", gap: 12, paddingVertical: 4 },
-  num: { fontSize: 15, fontWeight: "700", width: 16 },
+  num: { fontSize: 15, fontWeight: "700", width: 16, lineHeight: 20 },
+  small: { alignSelf: "flex-start", backgroundColor: "#4C5BFF", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14 },
+  smallText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
 });
