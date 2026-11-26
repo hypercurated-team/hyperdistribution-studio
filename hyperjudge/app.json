@@ -12,6 +12,7 @@
     "platforms": ["ios"],
     "ios": {
       "bundleIdentifier": "com.kraftxworks.hyperjudge",
+      "appleTeamId": "J7ZVMZND97",
       "supportsTablet": false,
       "config": { "usesNonExemptEncryption": false },
       "infoPlist": { "NSSupportsLiveActivities": true },
@@ -22,6 +23,7 @@
     "plugins": [
       "@bacons/apple-targets",
       ["expo-build-properties", { "ios": { "deploymentTarget": "17.0" } }]
-    ]
+    ],
+    "extra": { "eas": { "projectId": "1a48172d-b7a9-4e3d-8db9-23b54b07afc8" } }
   }
 }
