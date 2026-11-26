@@ -175,54 +175,32 @@ function Play({ c, onSetup }: { c: C; onSetup: () => void }) {
 
   return (
     <ScrollView contentContainerStyle={s.content}>
-      {auth.get("setupDone") !== "1" ? (
+      {!(auth.get("setupSteps") ?? "").split(",").includes("shortcut2") ? (
         <Pressable onPress={onSetup} style={({ pressed }) => [s.banner, { backgroundColor: c.band, opacity: pressed ? 0.7 : 1 }]}>
-          <Text style={[s.body, { color: c.text, flex: 1 }]}>Finish setup to play over Instagram.</Text>
+          <Text style={[s.body, { color: c.text, flex: 1 }]}>Add the new shortcut so rounds stay inside Instagram.</Text>
           <Text style={[s.body, { color: BLUE, fontWeight: "600" }]}>Set up</Text>
         </Pressable>
       ) : null}
 
       <View style={[s.card, { backgroundColor: c.card }]}>
-        <Text style={[s.prompt, { color: c.dim }]}>
-          {auth.get("text") && !busy ? "Spin to your guess, then lock it in." : "How many followers?"}
-        </Text>
-        <View style={s.wheelWrap}>
-          <View pointerEvents="none" style={[s.band, { backgroundColor: c.band }]} />
-          <ScrollView
-            ref={wheel}
-            style={{ height: ROW * VISIBLE }}
-            contentContainerStyle={{ paddingVertical: ROW * Math.floor(VISIBLE / 2) }}
-            showsVerticalScrollIndicator={false}
-            snapToInterval={ROW}
-            decelerationRate="fast"
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-          >
-            {STEPS.map((label, i) => {
-              const d = Math.abs(i - index);
-              return (
-                <View key={label} style={s.wheelRow}>
-                  <Text style={[s.step, { color: d === 0 ? c.text : c.dim, opacity: d === 0 ? 1 : d === 1 ? 0.55 : 0.25, fontSize: d === 0 ? 44 : 26 }]}>
-                    {label}
-                  </Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
-        <Pressable onPress={lockIn} disabled={busy} style={({ pressed }) => [s.button, { opacity: pressed || busy ? 0.6 : 1 }]}>
-          <Text style={s.buttonText}>{busy ? "Judging…" : `Lock in ${STEPS[index]}`}</Text>
+        <Text style={[s.cardTitle, { color: c.text }]}>Play without leaving Instagram</Text>
+        {[
+          "On any reel, tap your HyperJudge button.",
+          "Pick how many followers you think the creator has.",
+          "Keep watching. The answer and your score drop in as a banner.",
+        ].map((t, i) => (
+          <View key={t} style={s.howRow}>
+            <Text style={[s.howNum, { color: BLUE }]}>{i + 1}</Text>
+            <Text style={[s.body, { color: c.text, flex: 1 }]}>{t}</Text>
+          </View>
+        ))}
+        <Pressable onPress={() => openInstagram().catch(() => {})} style={({ pressed }) => [s.button, { opacity: pressed ? 0.6 : 1 }]}>
+          <Text style={s.buttonText}>Open Instagram</Text>
         </Pressable>
-        {note ? <Text style={[s.small, { color: c.dim, textAlign: "center" }]}>{note}</Text> : null}
+        <Text style={[s.small, { color: c.dim, textAlign: "center" }]}>
+          Your rounds count on the leaderboard under this iPhone's name.
+        </Text>
       </View>
-
-      {result ? (
-        <View style={[s.card, { backgroundColor: c.card }]}>
-          <Text style={[s.resultTitle, { color: verdictColor(result.title, c) }]}>{result.title}</Text>
-          <Text style={[s.body, { color: c.text }]}>{result.detail}</Text>
-          {result.score ? <Text style={[s.body, { color: c.dim }]}>{result.score}</Text> : null}
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -231,12 +209,13 @@ const verdictColor = (title: string, c: C) => (/Nailed/.test(title) ? GOLD : /Cl
 
 /** The three things to do once. Each row is the button; a tick shows what's done. */
 function Setup({ c, onDone }: { c: C; onDone: () => void }) {
-  const [done, setDone] = useState(() => (auth.get("setupSteps") ?? "").split(",").filter(Boolean));
+  const [done, setDone] = useState(() => (auth.get("setupSteps") ?? "").split(",").filter((id) => id && id !== "shortcut"));
   const [note, setNote] = useState("");
   const steps: { id: string; title: string; detail: string; action: string; run: () => Promise<void> }[] = [
-    { id: "shortcut", title: "Add the shortcut", detail: "In the share sheet, pick Shortcuts, then Add Shortcut.", action: "Add", run: addShortcut },
+    // "shortcut2": the round now runs inside the shortcut, so everyone adds the new one once.
+    { id: "shortcut2", title: "Add the shortcut", detail: "In the share sheet, pick Shortcuts, then Add Shortcut. Already have an older one? Replace it.", action: "Add", run: addShortcut },
     { id: "touch", title: "Put it on AssistiveTouch", detail: "Turn on AssistiveTouch, then set Single-Tap to HyperJudge. Back Tap works too.", action: "Open", run: openAssistiveTouch },
-    { id: "insta", title: "Play on a reel", detail: "Tap the button on any reel. Guess in the Dynamic Island, then Lock in.", action: "Open", run: openInstagram },
+    { id: "insta", title: "Play on a reel", detail: "Tap the button on any reel, pick a guess, and the answer shows up as a banner.", action: "Open", run: openInstagram },
   ];
   const mark = (id: string) => {
     const next = Array.from(new Set([...done, id]));
@@ -494,6 +473,8 @@ const s = StyleSheet.create({
   segText: { fontSize: 13 },
   banner: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
   prompt: { fontSize: 15, textAlign: "center" },
+  howRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  howNum: { width: 18, fontSize: 17, fontWeight: "700", lineHeight: 20 },
   lede: { fontSize: 15, lineHeight: 21, paddingHorizontal: 4 },
   group: { borderRadius: 12, paddingHorizontal: 16 },
   rowTitle: { fontSize: 17, fontWeight: "500" },
