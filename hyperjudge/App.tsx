@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -84,6 +85,11 @@ function Play({ c }: { c: C }) {
 
   useEffect(() => {
     wheel.current?.scrollTo({ y: index * ROW, animated: false });
+    // Coming back from Instagram or the island: show the latest result.
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") setResult(readResult());
+    });
+    return () => sub.remove();
   }, []);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -132,7 +138,7 @@ function Play({ c }: { c: C }) {
         {setupOpen ? (
           <>
             <SetupStep c={c} n={1} label="Add the HyperJudge shortcut" hint="Pick Shortcuts in the share sheet, then Add Shortcut." onPress={() => run(addShortcut)} />
-            <SetupStep c={c} n={2} label="Turn on AssistiveTouch" hint="AssistiveTouch → on → Single-Tap → HyperJudge." onPress={() => run(openAssistiveTouch)} />
+            <SetupStep c={c} n={2} label="Turn on AssistiveTouch" hint="AssistiveTouch → on → Single-Tap → HyperJudge. Or Back Tap → Double Tap." onPress={() => run(openAssistiveTouch)} />
             <SetupStep c={c} n={3} label="Open Instagram and tap the button" hint="Guess with < > in the Dynamic Island, then Lock in." onPress={() => run(openInstagram)} />
             <Pressable
               onPress={() => {

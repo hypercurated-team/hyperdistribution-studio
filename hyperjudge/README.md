@@ -26,6 +26,9 @@ follower count in the Dynamic Island. Scores come from the HyperMixer server (`/
    drop them and keep the fallback.
 3. **Open Instagram**.
 
+If the intent's name or the team id changes, rebuild and re-sign the shortcut. The module's
+Swift lives in `modules/hj-live/ios` (only the root `/ios` is generated and ignored).
+
 ## Accounts and leaderboard
 
 Same accounts as HyperMixer (the Hypercurated Firebase project). Email and password use

@@ -1,7 +1,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 
 const config = getDefaultConfig(__dirname);
-// The HyperJudge shortcut ships inside the app (assets/HyperJudge.shortcut).
+// Ship the signed Shortcuts file (assets/HyperJudge.shortcut) inside the app.
 config.resolver.assetExts.push("shortcut");
 
 module.exports = config;
