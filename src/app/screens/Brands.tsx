@@ -2,7 +2,7 @@ import { useState } from "react";
 import { buildBrain, hasKey } from "../ai";
 import { go, type ScreenProps } from "../App";
 import { BRAND_COLORS, PLATFORMS } from "../platforms";
-import { col, saveBrand, thisWeek, uid, type Brand, type Channel } from "../store";
+import { col, saveBrand, thisWeek, toneText, uid, type Brand, type Channel } from "../store";
 import { brandColor, brandColor2, errText, Glyph, Icon, initials, Sheet, toast } from "../ui";
 
 export default function Brands({ brands, posts }: ScreenProps) {
@@ -42,7 +42,7 @@ export default function Brands({ brands, posts }: ScreenProps) {
                 <strong>{b.name}</strong>
                 <span className={`tag ${ready ? "ok" : "warn"}`}>{ready ? "Brain ready" : "Needs a brain"}</span>
               </div>
-              <p>{b.brain?.tone || b.brain?.summary || "Add a website or profile link, then build its brain."}</p>
+              <p>{toneText(b.brain?.tone) || b.brain?.summary || "Add a website or profile link, then build its brain."}</p>
               <div className="row wrap" style={{ gap: 6 }}>
                 {(b.channels ?? []).map((c) => <Glyph key={c.id} platform={c.platform} />)}
                 <span className="small muted" style={{ marginLeft: "auto" }}>{target ? `${done} of ${target} this week` : "No weekly target"}</span>

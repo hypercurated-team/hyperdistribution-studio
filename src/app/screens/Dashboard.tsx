@@ -16,8 +16,9 @@ export default function Dashboard({ brands, posts }: ScreenProps) {
     <main className="screen">
       <header className="head">
         <div>
+          <span className="brandbar" aria-label="Hypercurated HyperMixer"><span className="hc-mark" aria-hidden="true" /><span className="hc-word">HyperMixer</span></span>
+          <h1 style={{ marginTop: 10 }}>Dashboard</h1>
           <span className="small muted">This week · {brands.length} brand{brands.length === 1 ? "" : "s"}</span>
-          <h1>Dashboard</h1>
         </div>
         <a className="btn icon" href="#/connect" aria-label="Connections"><Icon name="link" size={20} /></a>
       </header>

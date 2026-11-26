@@ -43,14 +43,16 @@ export default function SignIn({ onDone }: { onDone?: () => void }) {
   return (
     <main className="screen" style={{ justifyContent: "center", maxWidth: 420, margin: "0 auto", width: "100%", paddingBottom: 40 }}>
       <div className="stack" style={{ gap: 6, textAlign: "center", marginBottom: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 30 }}>HyperMixer</h1>
+        <span className="hc-mark" aria-hidden="true" style={{ width: 64, alignSelf: "center", marginBottom: 6 }} />
+        <span className="hc-word muted" style={{ alignSelf: "center" }}>Hypercurated</span>
+        <h1 style={{ margin: "6px 0 0", fontSize: 34 }}>HyperMixer</h1>
         <p className="muted" style={{ margin: 0 }}>Sign in to keep your brands and free AI actions with you.</p>
       </div>
 
       {!mode && (
         <div className="stack" style={{ gap: 10 }}>
           {PROVIDERS.filter((p) => auth.state.providers[p.id]).map((p) => (
-            <button key={p.id} type="button" className={`btn block ${p.id === "apple" ? "primary" : ""}`} disabled={!!busy}
+            <button key={p.id} type="button" className={`btn block ${p.id === "apple" ? "apple" : ""}`} disabled={!!busy}
               onClick={() => run(p.id, () => auth.provider(p.id))} style={{ gap: 10, justifyContent: "center" }}>
               {p.glyph}{busy === p.id ? "Waiting for sign-in…" : p.label}
             </button>
@@ -119,11 +121,12 @@ export function SignInRelay() {
 
   return (
     <main className="screen" style={{ justifyContent: "center", maxWidth: 420, margin: "0 auto", width: "100%", textAlign: "center" }}>
-      <h1 style={{ margin: 0, fontSize: 26 }}>HyperMixer</h1>
+      <span className="hc-mark" aria-hidden="true" style={{ width: 56, alignSelf: "center" }} />
+      <h1 style={{ margin: 0, fontSize: 28 }}>HyperMixer</h1>
       {!link ? (
         <>
           <p className="muted" style={{ margin: 0 }}>Sign in, then you'll go straight back to the app.</p>
-          <button type="button" className={`btn block ${p === "apple" ? "primary" : ""}`} disabled={busy || !ready} onClick={go} style={{ gap: 10, justifyContent: "center" }}>
+          <button type="button" className={`btn block ${p === "apple" ? "apple" : ""}`} disabled={busy || !ready} onClick={go} style={{ gap: 10, justifyContent: "center" }}>
             {label.glyph}{busy ? "Waiting for sign-in…" : label.label}
           </button>
         </>

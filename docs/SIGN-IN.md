@@ -29,6 +29,32 @@ Hypercurated app. One account works in both.
 - **Provider buttons:** a button only appears when that provider is switched
   on in Firebase (`/api/auth` checks).
 
+## Account sync
+
+Signed in, a person's brands, posts, dumps, renders, subs, styles, analyses,
+kits and setups follow them to every device (`src/shim/sync.ts`).
+
+- **Where it's stored:** in their own space in the same Firebase project,
+  `users/{uid}/hm_<collection>/<doc>`. Only that person can read or write it.
+- **How it's written:** each document is `{ d: JSON, t: last change, x: deleted }`,
+  and the newest change wins.
+- **When it runs:** at sign-in, whenever the app comes back to the front, and
+  about 1.5 s after any change.
+- **Switching it on:** one Firestore rule, added by `hm-enable-sync.sh`. The
+  script adds that single block to the live rules and prints how to undo it.
+  - The same block must also be in the Hypercurated repo's `firebase/firestore.rules`.
+    Otherwise the next Hypercurated rules deploy removes it.
+
+```
+match /users/{userId}/{coll}/{docId} {
+  allow read, write: if request.auth != null && request.auth.uid == userId
+    && coll.matches('hm_[a-z]+');
+}
+```
+
+- **Moving data in:** a backup file (Connect → Import backup) is uploaded to the
+  account as soon as it's imported.
+
 ## To switch it on
 
 1. **Authorized domain** (needed for Apple / Google / Microsoft):
