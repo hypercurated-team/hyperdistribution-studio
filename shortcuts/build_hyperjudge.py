@@ -14,8 +14,11 @@ What the shortcut does, in order:
   4. Text: your leaderboard code (asked once when you add the shortcut;
      copy it from the HyperJudge app's Setup tab, or leave it blank)
   5. Get Device Details: device name (the guest name when there's no code)
-  6. POST {text, guess, code, player} to <API base>/api/judge?format=text
-  7. Show Notification with the reply (three short lines)
+  6. POST {text} to <API base>/api/judge?who=1: the creator's username
+  7. Get instagram.com/<username>/ from the phone (Instagram often refuses cloud
+     servers) and match "1,570 Followers" in it
+  8. POST {text, guess, code, player, handle, profile} to <API base>/api/judge?format=text
+  9. Show Notification with the reply (three short lines)
 """
 import plistlib
 import sys
@@ -45,6 +48,14 @@ def text_with(out_uuid, name):
     }
 
 
+def text_around(before, out_uuid, name, after):
+    """Literal text with one variable in the middle."""
+    return {
+        "Value": {"string": before + "￼" + after, "attachmentsByRange": {f"{{{len(before)}, 1}}": ref(out_uuid, name)}},
+        "WFSerializationType": "WFTextTokenString",
+    }
+
+
 def plain(s):
     return {"Value": {"string": s}, "WFSerializationType": "WFTextTokenString"}
 
@@ -56,7 +67,7 @@ def action(ident, params, out=None):
     return {"WFWorkflowActionIdentifier": ident, "WFWorkflowActionParameters": p}
 
 
-shot, ocr, ranges, chosen, code, device, reply = (uid() for _ in range(7))
+shot, ocr, ranges, chosen, code, device, who, page, count, reply = (uid() for _ in range(10))
 
 actions = [
     action("is.workflow.actions.comment", {"WFCommentActionText": "HyperJudge by HyperMixer. Guess the creator's followers while you watch a reel. Run it from AssistiveTouch (Settings > Accessibility > Touch > AssistiveTouch > Single-Tap > HyperJudge)."}),
@@ -73,6 +84,39 @@ actions = [
     action(
         "is.workflow.actions.downloadurl",
         {
+            "WFURL": f"{API}/api/judge?who=1",
+            "WFHTTPMethod": "POST",
+            "WFHTTPBodyType": "JSON",
+            "ShowHeaders": False,
+            "WFJSONValues": {
+                "Value": {"WFDictionaryFieldValueItems": [{"WFItemType": 0, "WFKey": plain("text"), "WFValue": text_with(ocr, "Text from Image")}]},
+                "WFSerializationType": "WFDictionaryFieldValue",
+            },
+        },
+        who,
+    ),
+    action(
+        "is.workflow.actions.downloadurl",
+        {
+            "WFURL": text_around("https://www.instagram.com/", who, "Contents of URL", "/"),
+            "WFHTTPMethod": "GET",
+            "ShowHeaders": True,
+            "WFHTTPHeaders": {
+                "Value": {
+                    "WFDictionaryFieldValueItems": [
+                        {"WFItemType": 0, "WFKey": plain("User-Agent"), "WFValue": plain("Mozilla/5.0 (compatible; HyperJudge/1.0; +https://hyperdistribution-studio.vercel.app)")},
+                        {"WFItemType": 0, "WFKey": plain("Accept-Language"), "WFValue": plain("en-US,en;q=0.9")},
+                    ]
+                },
+                "WFSerializationType": "WFDictionaryFieldValue",
+            },
+        },
+        page,
+    ),
+    action("is.workflow.actions.text.match", {"text": attachment(page, "Contents of URL"), "WFMatchTextPattern": r"[\d.,]+\s*[KMB]?\s+Followers", "WFMatchTextCaseSensitive": False}, count),
+    action(
+        "is.workflow.actions.downloadurl",
+        {
             "WFURL": f"{API}/api/judge?format=text",
             "WFHTTPMethod": "POST",
             "WFHTTPBodyType": "JSON",
@@ -83,6 +127,8 @@ actions = [
                         {"WFItemType": 0, "WFKey": plain("text"), "WFValue": text_with(ocr, "Text from Image")},
                         {"WFItemType": 0, "WFKey": plain("guess"), "WFValue": text_with(chosen, "Chosen Item")},
                         {"WFItemType": 0, "WFKey": plain("code"), "WFValue": text_with(code, "Text")},
+                        {"WFItemType": 0, "WFKey": plain("handle"), "WFValue": text_with(who, "Contents of URL")},
+                        {"WFItemType": 0, "WFKey": plain("profile"), "WFValue": text_with(count, "Matches")},
                         {"WFItemType": 0, "WFKey": plain("player"), "WFValue": text_with(device, "Device Details")},
                     ]
                 },

@@ -202,8 +202,12 @@ export async function businessDiscovery(handle: string): Promise<number | null> 
  */
 export function countFromProfileHtml(html: string): number | null {
   const tag = (html.match(/<meta[^>]*>/gi) ?? []).find((t) => /(?:property|name)="(?:og:description|description)"/i.test(t)) ?? "";
-  const desc = tag.match(/content="([^"]+)"/i)?.[1] ?? "";
-  const m = desc.replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
+  return countFromText(tag.match(/content="([^"]+)"/i)?.[1] ?? "");
+}
+
+/** "1,570 Followers", "12.3K Followers" (also inside a longer page description) → a number. */
+export function countFromText(desc: string): number | null {
+  const m = String(desc ?? "").replace(/&#\d+;|&\w+;/g, " ").match(/([\d.,]+)\s*([KMB])?\s+Followers/i);
   if (!m) return null;
   const n = Number(m[1].replace(/,/g, "")) * ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[(m[2] || "").toUpperCase()] || Number(m[1].replace(/,/g, ""));
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
@@ -369,7 +373,10 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
   const text = typeof body.text === "string" ? body.text : "";
   if (!handle && text.trim().length < 2) return { line: "Couldn't read this screen. Open a reel and try again.", error: "no_text" };
 
-  const found = await lookUp(text, handle ?? handleFromText(text));
+  // The shortcut reads the creator's public profile from the phone (Instagram often turns
+  // cloud servers away) and sends the "1,570 Followers" bit as `profile`.
+  const phoneCount = handle ? countFromText(String(body.profile ?? "")) : null;
+  const found = handle && phoneCount !== null ? await remember({ handle, followers: phoneCount }) : await lookUp(text, handle ?? handleFromText(text));
   if ("error" in found) return { line: found.error, error: "lookup" };
   if (!found.handle) return { line: "Couldn't spot the creator on this screen. Try when their name is showing.", error: "no_handle" };
   if (found.followers === null) return { line: `Couldn't find @${found.handle}'s follower count. No points this time.`, handle: found.handle, error: "no_count" };
@@ -400,6 +407,12 @@ async function round(req: Request): Promise<Record<string, unknown> & { line: st
  * so anything that goes wrong still reads as a sentence on the phone.
  */
 export async function POST(req: Request) {
+  // Step one for the shortcut: just name the creator, quickly, so the phone can open their profile.
+  if (new URL(req.url).searchParams.has("who")) {
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const who = handleFromText(typeof body.text === "string" ? body.text : "") ?? "";
+    return new Response(who, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
   const out = await round(req);
   if (new URL(req.url).searchParams.get("format") === "text") {
     return new Response(out.line, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
